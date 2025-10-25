@@ -17,10 +17,14 @@ def get_user_id_from_token():
         return None
     token = auth_header.split(" ")[1]
     try:
-        decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        return decoded.get("sub")
-    except Exception:
+        # Use Supabase's built-in JWT verification
+        response = supabase.auth.get_user(token)
+        if response.user:
+            return response.user.id
+    except Exception as e:
+        print(f"JWT verification error: {e}")
         return None
+    return None
 
 
 @auth_bp.route("/register", methods=["POST"])
