@@ -7,12 +7,13 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configure CORS with more specific settings
+# Configure CORS - allow all origins to support Vercel deployments
+# This allows the frontend from any domain to access the API
 CORS(app,
-     origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:3000", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
+     origins="*",  # Allow all origins for now
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
-     supports_credentials=True)
+     supports_credentials=False)
 
 # Configure file upload settings
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
