@@ -967,6 +967,35 @@ function App() {
         </nav>
       </header>
       
+      <div className="nav-buttons-top-right">
+        {isLoggedIn && (
+          <button className="nav-icon-btn" title="Create Post" onClick={handleNavigateToCreatePost}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14m-7-7h14"/>
+            </svg>
+          </button>
+        )}
+        <button className="nav-icon-btn" title="Profile" onClick={handleNavigateToProfile}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="3"/>
+          </svg>
+        </button>
+        {!isLoggedIn ? (
+          <button className="nav-icon-btn" title="Sign Up" onClick={handleNavigateToSignup}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>
+            </svg>
+          </button>
+        ) : (
+          <button className="nav-icon-btn" title="Logout" onClick={handleLogout}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+            </svg>
+          </button>
+        )}
+      </div>
+      
       <div className="floating-logo" onClick={handleBackToHome}>
         <img src="/curio.png" alt="Curio Logo" className="logo" />
       </div>
