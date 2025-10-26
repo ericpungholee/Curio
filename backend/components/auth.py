@@ -1,30 +1,7 @@
 from flask import Blueprint, request, jsonify
-from supabase import create_client, Client
-import os
-import jwt
+from .common import supabase, retry_supabase_auth_call, get_user_id_from_token
 
 auth_bp = Blueprint("auth", __name__)
-
-# Supabase client
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-def get_user_id_from_token():
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return None
-    token = auth_header.split(" ")[1]
-    try:
-        # Use Supabase's built-in JWT verification
-        response = supabase.auth.get_user(token)
-        if response.user:
-            return response.user.id
-    except Exception as e:
-        print(f"JWT verification error: {e}")
-        return None
-    return None
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -33,15 +10,15 @@ def register():
         body = request.get_json()
         if not body:
             return jsonify({"error": "Request body is required"}), 400
-    except Exception as e:
-        if "Content-Type" in str(e):
-            return jsonify({"error": "Request body is required"}), 400
+    except Exception:
         return jsonify({"error": "Request body is required"}), 400
     
     try:
         email = body.get("email")
         password = body.get("password")
         username = body.get("username")
+        firstName = body.get("firstName")
+        lastName = body.get("lastName")
 
         if not email or not password or not username:
             return jsonify({"error": "Email, password, and username are required"}), 400
@@ -60,7 +37,9 @@ def register():
             "password": password,
             "options": {
                 "data": {
-                    "username": username
+                    "username": username,
+                    "firstName": firstName or "",
+                    "lastName": lastName or ""
                 }
             }
         })
@@ -71,6 +50,23 @@ def register():
 
         if resp.user is None:
             return jsonify({"error": "Signup failed"}), 400
+
+        # Create profile record after successful signup
+        try:
+            profile_data = {
+                "id": resp.user.id,
+                "username": username,
+                "email": email,
+                "bio": ""
+            }
+            
+            profile_result = supabase.table("profiles").insert(profile_data).execute()
+            
+            if not profile_result.data:
+                print(f"Warning: Profile creation failed for user {resp.user.id}")
+                
+        except Exception as profile_error:
+            print(f"Profile creation error: {profile_error}")
 
         return jsonify({
             "message": "Registered successfully. Check your email.",
@@ -88,9 +84,7 @@ def login():
         body = request.get_json()
         if not body:
             return jsonify({"error": "Request body is required"}), 400
-    except Exception as e:
-        if "Content-Type" in str(e):
-            return jsonify({"error": "Request body is required"}), 400
+    except Exception:
         return jsonify({"error": "Request body is required"}), 400
     
     try:
@@ -100,10 +94,13 @@ def login():
         if not email or not password:
             return jsonify({"error": "Email and password are required"}), 400
 
-        resp = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
+        def login_call():
+            return supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+        
+        resp = retry_supabase_auth_call(login_call)
         
         # Check if response has errors
         if hasattr(resp, 'error') and resp.error:
@@ -128,48 +125,56 @@ def login():
 
 @auth_bp.route("/profile", methods=["GET"])
 def get_profile():
-    user_id = get_user_id_from_token()
+    user_id = get_user_id_from_token(request)
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
+    
+    try:
+        # Get user info from Supabase Auth to access user metadata
+        def auth_call():
+            auth_header = request.headers.get("Authorization")
+            token = auth_header.split(" ")[1]
+            return supabase.auth.get_user(token)
+        
+        response = retry_supabase_auth_call(auth_call)
+        if response and response.user:
+            user_metadata = response.user.user_metadata or {}
+        else:
+            return jsonify({"error": "Unauthorized"}), 401
+    except Exception as e:
+        print(f"JWT verification error: {e}")
+        return jsonify({"error": "Unauthorized"}), 401
 
+    # Get profile data from profiles table
     data = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
-    return jsonify(data.data)
+    
+    if data.data:
+        profile = data.data
+        
+        # Get first and last name from user metadata (stored during registration)
+        firstName = user_metadata.get("firstName", "")
+        lastName = user_metadata.get("lastName", "")
+        
+        # Convert backend field names to frontend expected names
+        profile_response = {
+            "id": profile.get("id"),
+            "firstName": firstName,
+            "lastName": lastName,
+            "email": profile.get("email", ""),
+            "username": profile.get("username", ""),
+            "createdAt": profile.get("created_at", ""),
+            "profile_pic_url": profile.get("profile_pic_url"),
+            "profile_pic_path": profile.get("profile_pic_path")
+        }
+        
+        return jsonify(profile_response)
+    else:
+        return jsonify({"error": "Profile not found"}), 404
 
 @auth_bp.route("/profile", methods=["PUT"])
 def update_profile():
-    user_id = get_user_id_from_token()
-    if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    body = request.get_json()
-    username = body.get("username")
-    bio = body.get("bio")
-
-    # If username is being updated, check if it's unique
-    if username:
-        try:
-            existing_user = supabase.table("profiles").select("username").eq("username", username).neq("id", user_id).execute()
-            if existing_user.data:
-                return jsonify({"error": "Username already taken"}), 400
-        except Exception as e:
-            print(f"Error checking username: {e}")
-            return jsonify({"error": "Failed to check username availability"}), 500
-
-    # Update profile
-    update_data = {}
-    if username:
-        update_data["username"] = username
-    if bio is not None:
-        update_data["bio"] = bio
-
-    if update_data:
-        result = supabase.table("profiles").update(update_data).eq("id", user_id).execute()
-        if result.data:
-            return jsonify({"message": "Profile updated successfully", "profile": result.data[0]})
-        else:
-            return jsonify({"error": "Failed to update profile"}), 500
-    else:
-        return jsonify({"error": "No fields to update"}), 400
+    # Profile editing is disabled - only profile picture uploads are allowed
+    return jsonify({"error": "Profile editing is disabled. Only profile picture uploads are allowed."}), 403
 
 @auth_bp.route("/check-username", methods=["POST"])
 def check_username():
@@ -258,4 +263,18 @@ def get_profile_pic(user_id):
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
-    return jsonify({"message": "Logout handled client-side by deleting token"})
+    try:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            try:
+                # Sign out the user from Supabase
+                supabase.auth.sign_out(token)
+            except Exception as e:
+                print(f"Supabase logout error: {e}")
+                # Continue with logout even if Supabase call fails
+        
+        return jsonify({"message": "Logged out successfully"}), 200
+    except Exception as e:
+        print(f"Logout error: {e}")
+        return jsonify({"message": "Logged out successfully"}), 200
