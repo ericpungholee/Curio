@@ -176,8 +176,6 @@ const CreatePost: React.FC<CreatePostProps> = ({ onBackToHome, onPostCreated }) 
         throw new Error('Empty response from server')
       }
 
-      const data = JSON.parse(responseText)
-
       showNotification('success', 'Post created successfully!')
       // Reset form
       setTitle('')
