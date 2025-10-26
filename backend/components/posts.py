@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from .common import supabase, get_user_id_from_token
+import os
 
 posts_bp = Blueprint("posts", __name__)
 
@@ -19,15 +20,22 @@ def create_post():
         
         title = body.get("title")
         content = body.get("content")
+        image_url = body.get("image_url")  # Optional image URL
         
         if not title or not content:
             return jsonify({"error": "Title and content are required"}), 400
         
-        result = supabase.table("posts").insert({
+        post_data = {
             "author_id": user_id,
             "title": title,
             "content": content
-        }).execute()
+        }
+        
+        # Add image URL if provided
+        if image_url:
+            post_data["image_url"] = image_url
+        
+        result = supabase.table("posts").insert(post_data).execute()
         
         if result.data:
             return jsonify({"post": result.data[0]}), 201
@@ -190,3 +198,72 @@ def get_post(post_id):
     except Exception as e:
         print(f"Error getting post: {e}")
         return jsonify({"error": f"Failed to get post: {str(e)}"}), 500
+
+@posts_bp.route("/upload-image", methods=["POST"])
+def upload_post_image():
+    """Upload an image for a post"""
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    try:
+        # Check if file is present in request
+        if 'file' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if file.content_type not in allowed_types:
+            return jsonify({"error": "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed."}), 400
+        
+        # Validate file size (5MB max)
+        file.seek(0, 2)  # Seek to end
+        file_size = file.tell()
+        file.seek(0)  # Reset to beginning
+        
+        if file_size > 5 * 1024 * 1024:  # 5MB
+            return jsonify({"error": "File too large. Maximum size is 5MB."}), 400
+        
+        # Read file data
+        file_data = file.read()
+        
+        # Create user-specific filename with timestamp
+        import time
+        timestamp = int(time.time())
+        file_extension = os.path.splitext(file.filename)[1]
+        file_name = f"post-images/{user_id}_{timestamp}{file_extension}"
+        
+        # Upload to post images bucket
+        try:
+            file_options = {"content-type": file.content_type}
+            upload_response = supabase.storage.from_("post-images").upload(
+                path=file_name,
+                file=file_data,
+                file_options=file_options
+            )
+            
+            # Get public URL for the uploaded image
+            public_url = supabase.storage.from_("post-images").get_public_url(file_name)
+            
+            return jsonify({
+                "message": "Image uploaded successfully",
+                "image_url": public_url,
+                "file_name": file_name,
+                "content_type": file.content_type,
+                "file_size": file_size
+            }), 200
+                
+        except Exception as upload_error:
+            print(f"Error uploading file: {upload_error}")
+            # Check if it's an RLS error
+            if "row-level security" in str(upload_error).lower():
+                return jsonify({"error": "Upload failed: Permission denied. Please ensure your user has proper permissions."}), 403
+            return jsonify({"error": f"Upload failed: {str(upload_error)}"}), 500
+            
+    except Exception as e:
+        print(f"Post image upload endpoint error: {e}")
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
