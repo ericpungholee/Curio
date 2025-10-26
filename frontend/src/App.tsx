@@ -406,9 +406,9 @@ const NODE_TYPES = {
   postCard: PostCardNode,
 } as const
 
-// Center coordinates (assuming typical screen size)
-const CENTER_X = 0
-const CENTER_Y = 0
+// Center coordinates to center nodes on screen
+const CENTER_X = 400
+const CENTER_Y = 300
 
 const INITIAL_NODES: Node[] = [
   {
@@ -707,7 +707,7 @@ function App() {
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           nodeTypes={NODE_TYPES}
-          defaultViewport={{ x: -150, y: -75, zoom: 0.6 }}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
           style={{ width: '100%', height: '100%' }}
         >
           <Background gap={20} size={2} color="rgba(255, 255, 255, 0.2)" />
