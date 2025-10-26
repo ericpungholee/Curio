@@ -701,6 +701,14 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
         <img src="/curio.png" alt="Curio Logo" className="logo" />
       </div>
 
+      {/* Back Button */}
+      <button className="back-button" onClick={onBackToHome}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Back to Home
+      </button>
+
       {/* Profile Container */}
       <div className="profile-container">
         <div className="profile-layout">
@@ -822,11 +830,27 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
                 <div className="posts-feed">
                   {userPosts.map((post) => (
                     <div key={post.id} className="post-feed-item" onClick={() => handlePostClick(post)}>
-                      {post.image_url && (
-                        <div className="post-feed-image">
+                      <div className="post-feed-image">
+                        {post.image_url ? (
                           <img src={post.image_url} alt={post.title} />
-                        </div>
-                      )}
+                        ) : (
+                          <div style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: 'rgba(255, 255, 255, 0.3)'
+                          }}>
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                              <circle cx="8.5" cy="8.5" r="1.5"/>
+                              <path d="M21 15l-5-5L5 21"/>
+                            </svg>
+                          </div>
+                        )}
+                      </div>
                       <div className="post-feed-content">
                         <h3 className="post-feed-item-title">{post.title}</h3>
                         <p className="post-feed-text">{post.content}</p>
