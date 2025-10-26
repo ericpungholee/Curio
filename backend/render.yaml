@@ -2,6 +2,7 @@ services:
   - type: web
     name: curio-backend
     env: python
+    rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
