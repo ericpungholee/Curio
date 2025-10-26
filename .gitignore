@@ -105,7 +105,7 @@ dist
 
 # Gatsby files
 .cache/
-public
+# Note: 'public' dir removed to allow Vite frontend/public assets to be tracked
 
 # Storybook build outputs
 .out
