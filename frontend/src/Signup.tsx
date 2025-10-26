@@ -153,7 +153,7 @@ const Signup = ({ onBackToHome, onSignupSuccess, onNavigateToLogin }: SignupProp
     <div className="signup-page">
       {/* Floating Logo */}
       <div className="floating-logo">
-        <img src="/lof@curio.png" alt="Curio Logo" className="logo" />
+        <img src="/curio.png" alt="Curio Logo" className="logo" />
       </div>
 
       {/* Back Button */}

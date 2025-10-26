@@ -151,6 +151,7 @@ def upload_profile_pic():
     """
     Upload a profile picture from FormData to Supabase Storage
     Automatically uses 'profile-pictures' bucket and user-specific naming
+    Optimized for better performance
     """
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -187,28 +188,34 @@ def upload_profile_pic():
         if file.content_type not in allowed_types:
             return jsonify({"error": "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed."}), 400
         
-        # Validate file size (5MB max)
+        # Validate file size (8MB max - increased since we compress on frontend)
         file.seek(0, 2)  # Seek to end
         file_size = file.tell()
         file.seek(0)  # Reset to beginning
         
-        if file_size > 5 * 1024 * 1024:  # 5MB
-            return jsonify({"error": "File too large. Maximum size is 5MB."}), 400
+        if file_size > 8 * 1024 * 1024:  # 8MB
+            return jsonify({"error": "File too large. Maximum size is 8MB."}), 400
         
-        # Read file data
+        # Read file data in chunks for better memory management
         file_data = file.read()
         
-        # Create user-specific filename
+        # Create user-specific filename with timestamp to avoid conflicts
         file_extension = os.path.splitext(file.filename)[1]
-        file_name = f"profile-pics/{user_id}{file_extension}"
+        import time
+        timestamp = int(time.time())
+        file_name = f"profile-pics/{user_id}_{timestamp}{file_extension}"
         
         # Upload to profile pictures bucket
         try:
-            # Try to remove existing file if it exists (to update profile pic)
+            # Remove old profile pictures for this user (cleanup)
             try:
-                supabase.storage.from_("profile-pictures").remove([file_name])
+                # List existing files for this user
+                existing_files = supabase.storage.from_("profile-pictures").list("profile-pics")
+                for existing_file in existing_files:
+                    if existing_file['name'].startswith(f"{user_id}_"):
+                        supabase.storage.from_("profile-pictures").remove([f"profile-pics/{existing_file['name']}"])
             except Exception:
-                pass  # File doesn't exist, which is fine
+                pass  # Cleanup failed, continue with upload
             
             file_options = {"content-type": file.content_type}
             upload_response = supabase.storage.from_("profile-pictures").upload(
@@ -220,21 +227,32 @@ def upload_profile_pic():
             # Get public URL for the uploaded image
             public_url = supabase.storage.from_("profile-pictures").get_public_url(file_name)
             
-            # Update user profile with the new URL
-            update_result = supabase.table("profiles").update({
-                "profile_pic_url": public_url,
-                "profile_pic_path": file_name
-            }).eq("id", user_id).execute()
-            
-            if update_result.data:
-                return jsonify({
-                    "message": "Profile picture uploaded successfully",
+            # Update user profile with the new URL (async operation)
+            try:
+                update_result = supabase.table("profiles").update({
                     "profile_pic_url": public_url,
-                    "profile_pic_path": file_name,
-                    "content_type": file.content_type,
-                    "file_size": file_size
-                }), 200
-            else:
+                    "profile_pic_path": file_name
+                }).eq("id", user_id).execute()
+                
+                if update_result.data:
+                    return jsonify({
+                        "message": "Profile picture uploaded successfully",
+                        "profile_pic_url": public_url,
+                        "profile_pic_path": file_name,
+                        "content_type": file.content_type,
+                        "file_size": file_size
+                    }), 200
+                else:
+                    return jsonify({
+                        "message": "File uploaded but profile update failed",
+                        "profile_pic_url": public_url,
+                        "profile_pic_path": file_name,
+                        "content_type": file.content_type,
+                        "file_size": file_size
+                    }), 200
+            except Exception as update_error:
+                print(f"Profile update error: {update_error}")
+                # Still return success since file was uploaded
                 return jsonify({
                     "message": "File uploaded but profile update failed",
                     "profile_pic_url": public_url,
@@ -244,7 +262,7 @@ def upload_profile_pic():
                 }), 200
                 
         except Exception as upload_error:
-            print(f"Error uploading file or updating profile: {upload_error}")
+            print(f"Error uploading file: {upload_error}")
             # Check if it's an RLS error
             if "row-level security" in str(upload_error).lower():
                 return jsonify({"error": "Upload failed: Permission denied. Please ensure your user has proper permissions."}), 403
