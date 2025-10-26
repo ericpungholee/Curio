@@ -421,8 +421,8 @@ function App() {
       </header>
       
       {/* Floating Logo */}
-      <div className="floating-logo">
-        <img src="/lof@curio.png" alt="Curio Logo" className="logo" />
+      <div className="floating-logo" onClick={handleBackToHome}>
+        <img src="/curio.png" alt="Curio Logo" className="logo" />
       </div>
       
       <div className="graph-container">

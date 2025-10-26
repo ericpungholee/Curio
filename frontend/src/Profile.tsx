@@ -31,10 +31,27 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     isVisible: false
   })
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   // Fetch profile data on component mount
   useEffect(() => {
-    fetchProfileData()
+    // Check if we have cached profile data
+    const cachedProfile = localStorage.getItem('cached_profile')
+    if (cachedProfile) {
+      try {
+        const parsedProfile = JSON.parse(cachedProfile)
+        setProfileData(parsedProfile)
+        setIsLoading(false)
+        
+        // Still fetch fresh data in background
+        fetchProfileData()
+      } catch (error) {
+        console.error('Error parsing cached profile:', error)
+        fetchProfileData()
+      }
+    } else {
+      fetchProfileData()
+    }
   }, [])
 
   const fetchProfileData = async () => {
@@ -74,6 +91,9 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
     
     setProfileData(data)
+    
+    // Cache the profile data
+    localStorage.setItem('cached_profile', JSON.stringify(data))
     } catch (error) {
       console.error('Profile fetch error:', error)
       setNotification({
@@ -109,6 +129,55 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     onLogout()
   }
 
+  const compressImage = (file: File, maxWidth: number = 400, maxHeight: number = 400, quality: number = 0.8): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+
+      img.onload = () => {
+        // Calculate new dimensions maintaining aspect ratio
+        let { width, height } = img
+        if (width > height) {
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width
+            width = maxWidth
+          }
+        } else {
+          if (height > maxHeight) {
+            width = (width * maxHeight) / height
+            height = maxHeight
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        // Draw and compress
+        ctx?.drawImage(img, 0, 0, width, height)
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              })
+              resolve(compressedFile)
+            } else {
+              reject(new Error('Failed to compress image'))
+            }
+          },
+          'image/jpeg',
+          quality
+        )
+      }
+
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
   const handlePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -124,10 +193,10 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
       return
     }
 
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
+    // Validate file size (10MB max before compression)
+    if (file.size > 10 * 1024 * 1024) {
       setNotification({
-        message: 'File too large. Maximum size is 5MB.',
+        message: 'File too large. Maximum size is 10MB.',
         type: 'error',
         isVisible: true
       })
@@ -141,27 +210,73 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     setIsUploading(true)
+    setUploadProgress(0)
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const response = await fetch('/api/storage/upload-profile-pic', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
+      // Show compression progress
+      setUploadProgress(10)
+      setNotification({
+        message: 'Compressing image...',
+        type: 'info',
+        isVisible: true
       })
 
-      const data = await response.json()
+      // Compress the image
+      const compressedFile = await compressImage(file)
+      setUploadProgress(30)
+      
+      setNotification({
+        message: 'Uploading...',
+        type: 'info',
+        isVisible: true
+      })
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Upload failed')
+      const formData = new FormData()
+      formData.append('file', compressedFile)
+
+      // Create XMLHttpRequest for progress tracking
+      const xhr = new XMLHttpRequest()
+      
+      const uploadPromise = new Promise((resolve, reject) => {
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 60) + 30 // 30-90%
+            setUploadProgress(progress)
+          }
+        })
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText))
+          } else {
+            reject(new Error(JSON.parse(xhr.responseText).error || 'Upload failed'))
+          }
+        })
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('Upload failed'))
+        })
+
+        xhr.open('POST', '/api/storage/upload-profile-pic')
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+        xhr.send(formData)
+      })
+
+      const data = await uploadPromise as any
+      setUploadProgress(100)
+
+      // Update profile data immediately with the new URL instead of refetching
+      if (data.profile_pic_url && profileData) {
+        const updatedProfile = {
+          ...profileData,
+          profile_pic_url: data.profile_pic_url,
+          profile_pic_path: data.profile_pic_path
+        }
+        setProfileData(updatedProfile)
+        
+        // Update cache with new profile data
+        localStorage.setItem('cached_profile', JSON.stringify(updatedProfile))
       }
-
-      // Refresh profile data to get the new picture
-      await fetchProfileData()
 
       setNotification({
         message: 'Profile picture updated successfully!',
@@ -184,9 +299,9 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
 
   if (isLoading) {
     return (
-      <div className="signup-page">
-        <div className="signup-container">
-          <div className="signup-card">
+      <div className="profile-page">
+        <div className="profile-container">
+          <div className="profile-card">
             <div className="loading-container">
               <div className="loading-spinner"></div>
               <p>Loading profile...</p>
@@ -198,24 +313,16 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
   }
 
   return (
-    <div className="signup-page">
+    <div className="profile-page">
       {/* Floating Logo */}
-      <div className="floating-logo">
-        <img src="/lof@curio.png" alt="Curio Logo" className="logo" />
+      <div className="floating-logo" onClick={onBackToHome}>
+        <img src="/curio.png" alt="Curio Logo" className="logo" />
       </div>
 
-      {/* Back Button */}
-      <button className="back-button" onClick={onBackToHome}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M19 12H5M12 19l-7-7 7-7"/>
-        </svg>
-        Back to Home
-      </button>
-
       {/* Profile Container */}
-      <div className="signup-container">
-        <div className="signup-card">
-          <div className="signup-header">
+      <div className="profile-container">
+        <div className="profile-card">
+          <div className="profile-header">
             <h1>Profile</h1>
             <p>Manage your account information</p>
           </div>
@@ -241,7 +348,16 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
                   )}
                   {isUploading && (
                     <div className="upload-overlay">
-                      <div className="upload-spinner"></div>
+                      <div className="upload-progress">
+                        <div className="upload-spinner"></div>
+                        <div className="progress-bar">
+                          <div 
+                            className="progress-fill" 
+                            style={{ width: `${uploadProgress}%` }}
+                          ></div>
+                        </div>
+                        <div className="progress-text">{uploadProgress}%</div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -265,47 +381,44 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
               </div>
 
               {/* Profile Information */}
-              <div className="signup-form">
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>First Name</label>
-                    <div className="profile-field-display">
-                      {profileData.firstName || 'Not set'}
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Last Name</label>
-                    <div className="profile-field-display">
-                      {profileData.lastName || 'Not set'}
-                    </div>
-                  </div>
+              <div className="profile-info">
+                <div className="info-item">
+                  <span className="info-label">First Name</span>
+                  <span className="info-value">{profileData.firstName || 'Not set'}</span>
                 </div>
 
-                <div className="form-group">
-                  <label>Email</label>
-                  <div className="profile-field-display">
-                    {profileData.email || 'Not set'}
-                  </div>
+                <div className="info-item">
+                  <span className="info-label">Last Name</span>
+                  <span className="info-value">{profileData.lastName || 'Not set'}</span>
                 </div>
 
-                <div className="form-group">
-                  <label>Username</label>
-                  <div className="profile-field-display">
-                    {profileData.username || 'Not set'}
-                  </div>
+                <div className="info-item">
+                  <span className="info-label">Email</span>
+                  <span className="info-value">{profileData.email || 'Not set'}</span>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="profile-actions">
-                  <button 
-                    type="button" 
-                    className="logout-button"
-                    onClick={handleLogout}
-                  >
-                    Logout
-                  </button>
+                <div className="info-item">
+                  <span className="info-label">Username</span>
+                  <span className="info-value">{profileData.username || 'Not set'}</span>
                 </div>
+
+                <div className="info-item">
+                  <span className="info-label">Member Since</span>
+                  <span className="info-value">
+                    {profileData.createdAt ? new Date(profileData.createdAt).toLocaleDateString() : 'Unknown'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="profile-actions">
+                <button 
+                  type="button" 
+                  className="logout-button"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
               </div>
 
             </>
