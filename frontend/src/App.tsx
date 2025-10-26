@@ -707,6 +707,8 @@ function App() {
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           nodeTypes={NODE_TYPES}
+          fitView
+          fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
           defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
           style={{ width: '100%', height: '100%' }}
         >
