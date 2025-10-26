@@ -2,6 +2,8 @@
  * Authentication utilities for handling token refresh and API calls
  */
 
+import { API_BASE_URL } from './config'
+
 interface TokenResponse {
   access_token: string
   refresh_token: string
@@ -19,7 +21,7 @@ export const refreshAccessToken = async (): Promise<TokenResponse | null> => {
   }
 
   try {
-    const response = await fetch('/api/auth/refresh', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

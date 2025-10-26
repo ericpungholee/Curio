@@ -1,22 +1,19 @@
 /**
  * API Configuration
- * For production, use the deployed backend URL
- * For development, defaults to relative path (proxy handles it)
+ * For production, use Vercel's rewrite proxy (relative path)
+ * For development, defaults to relative path (vite proxy handles it)
  */
 
 const getApiBaseUrl = (): string => {
-  // Check for environment variable first
+  // Check for environment variable first (overrides all defaults)
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL
   }
   
-  // In development (when not in production build), use empty string for vite proxy
-  if (import.meta.env.DEV) {
-    return ''
-  }
-  
-  // In production, default to the deployed backend URL
-  return 'https://curio-e9ah.onrender.com'
+  // Use relative paths for both dev and production
+  // - Dev: Vite proxy in vite.config.ts handles /api requests
+  // - Production: Vercel rewrite in vercel.json handles /api requests
+  return ''
 }
 
 export const API_BASE_URL = getApiBaseUrl()

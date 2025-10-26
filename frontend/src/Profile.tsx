@@ -103,7 +103,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     try {
-      const response = await fetch('/api/auth/profile', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -158,7 +158,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     console.log('Token:', token.substring(0, 20) + '...')
     setIsLoadingPosts(true)
     try {
-      const response = await fetch('/api/post/my-posts', {
+      const response = await fetch(`${API_BASE_URL}/api/post/my-posts`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -495,7 +495,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     
     if (token) {
       try {
-        await fetch('/api/auth/logout', {
+        await fetch(`${API_BASE_URL}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,

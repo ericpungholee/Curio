@@ -34,6 +34,7 @@ interface PostData {
   is_liked?: boolean
   author_id?: string
   comments?: Comment[]
+  is_query?: boolean
 }
 
 interface Comment {
@@ -71,7 +72,7 @@ interface EdgeOverlayProps {
 }
 
 // Edge Overlay Component
-const EdgeOverlay = ({ isOpen, onClose, relationship, similarity, post1Id, post2Id, onBackToHome }: EdgeOverlayProps) => {
+const EdgeOverlay = ({ isOpen, onClose, similarity, post1Id, post2Id }: EdgeOverlayProps) => {
   const [relationshipDetails, setRelationshipDetails] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -211,7 +212,7 @@ const EdgeOverlay = ({ isOpen, onClose, relationship, similarity, post1Id, post2
 }
 
 // Modal component for full card view
-const PostModal = ({ isOpen, onClose, postData, onBackToHome }: ModalProps) => {
+const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
   const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState('')
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
@@ -844,13 +845,6 @@ function App() {
       loadGraphData(searchQuery)
     }
   }, [searchQuery, loadGraphData])
-
-  const handleClearSearch = useCallback(() => {
-    setSearchQuery('')
-    setNodes([])
-    setEdges([])
-    loadGraphData()
-  }, [loadGraphData, setNodes, setEdges])
 
   const handleSearchKeyPress = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
