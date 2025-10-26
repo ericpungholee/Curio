@@ -193,7 +193,82 @@ def check_username():
     except Exception as e:
         return jsonify({"error": f"Failed to check username: {str(e)}"}), 500
 
+@auth_bp.route("/profile/upload-pic", methods=["POST"])
+def upload_profile_pic():
+    user_id = get_user_id_from_token()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
 
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    # Check file type
+    allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    if file.content_type not in allowed_types:
+        return jsonify({"error": "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed"}), 400
+
+    # Check file size (max 5MB)
+    file.seek(0, 2)  # Seek to end
+    file_size = file.tell()
+    file.seek(0)  # Reset to beginning
+    if file_size > 5 * 1024 * 1024:  # 5MB
+        return jsonify({"error": "File too large. Maximum size is 5MB"}), 400
+
+    try:
+        # Read file data as bytes
+        file_data = file.read()
+        
+        # Convert to base64 for storage
+        import base64
+        file_data_base64 = base64.b64encode(file_data).decode('utf-8')
+        
+        # Update profile with base64 encoded image data
+        result = supabase.table("profiles").update({
+            "profile_pic": file_data_base64,
+            "profile_pic_type": file.content_type
+        }).eq("id", user_id).execute()
+        
+        if result.data:
+            return jsonify({
+                "message": "Profile picture uploaded successfully",
+                "profile_pic_type": file.content_type,
+                "profile_pic_size": len(file_data)
+            }), 200
+        else:
+            return jsonify({"error": "Failed to update profile"}), 500
+            
+    except Exception as e:
+        print(f"Upload error: {e}")
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+
+@auth_bp.route("/profile/pic/<user_id>", methods=["GET"])
+def get_profile_pic(user_id):
+    try:
+        # Get profile picture data
+        result = supabase.table("profiles").select("profile_pic, profile_pic_type").eq("id", user_id).single().execute()
+        
+        if not result.data or not result.data.get("profile_pic"):
+            return jsonify({"error": "Profile picture not found"}), 404
+        
+        # Decode base64 image data
+        import base64
+        pic_data_base64 = result.data["profile_pic"]
+        pic_type = result.data.get("profile_pic_type", "image/jpeg")
+        
+        # Decode base64 to bytes
+        pic_data = base64.b64decode(pic_data_base64)
+        
+        # Return the image data
+        from flask import Response
+        return Response(pic_data, mimetype=pic_type)
+        
+    except Exception as e:
+        print(f"Get profile pic error: {e}")
+        return jsonify({"error": f"Failed to get profile picture: {str(e)}"}), 500
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
