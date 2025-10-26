@@ -16,6 +16,7 @@ import Signup from './Signup'
 import Login from './Login'
 import Profile from './Profile'
 import CreatePost from './CreatePost'
+import { API_BASE_URL } from './config'
 
 // Types
 interface PostData {
@@ -85,7 +86,7 @@ const EdgeOverlay = ({ isOpen, onClose, relationship, similarity, post1Id, post2
     const token = localStorage.getItem('access_token')
     
     try {
-      const response = await fetch('/api/graph/relationship-details', {
+      const response = await fetch(`${API_BASE_URL}/api/graph/relationship-details`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -244,7 +245,7 @@ const PostModal = ({ isOpen, onClose, postData, onBackToHome }: ModalProps) => {
         headers['Authorization'] = `Bearer ${token}`
       }
 
-      const response = await fetch(`/api/post/post/${postId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/post/${postId}`, {
         method: 'GET',
         headers,
       })
@@ -282,7 +283,7 @@ const PostModal = ({ isOpen, onClose, postData, onBackToHome }: ModalProps) => {
     }
 
     try {
-      const response = await fetch(`/api/post/like-post/${currentPost.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/like-post/${currentPost.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -311,7 +312,7 @@ const PostModal = ({ isOpen, onClose, postData, onBackToHome }: ModalProps) => {
 
     setIsSubmittingComment(true)
     try {
-      const response = await fetch(`/api/post/comment/${currentPost.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/comment/${currentPost.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -339,7 +340,7 @@ const PostModal = ({ isOpen, onClose, postData, onBackToHome }: ModalProps) => {
     if (!token) return
 
     try {
-      const response = await fetch(`/api/post/comment/${commentId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/comment/${commentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -690,7 +691,7 @@ function App() {
     
     if (token) {
       try {
-        await fetch('/api/auth/logout', {
+        await fetch(`${API_BASE_URL}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -735,7 +736,7 @@ function App() {
       
       // Perform semantic search
       setIsSearching(true)
-      const response = await fetch('/api/graph/semantic-search', {
+      const response = await fetch(`${API_BASE_URL}/api/graph/semantic-search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -865,7 +866,7 @@ function App() {
       
       if (token && userId) {
         try {
-          const response = await fetch('/api/auth/profile', {
+          const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
             method: 'GET',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -975,12 +976,14 @@ function App() {
             </svg>
           </button>
         )}
-        <button className="nav-icon-btn" title="Profile" onClick={handleNavigateToProfile}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="3"/>
-          </svg>
-        </button>
+        {isLoggedIn && (
+          <button className="nav-icon-btn" title="Profile" onClick={handleNavigateToProfile}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="3"/>
+            </svg>
+          </button>
+        )}
         {!isLoggedIn ? (
           <button className="nav-icon-btn" title="Sign Up" onClick={handleNavigateToSignup}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

@@ -3,14 +3,15 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'https://curio-e9ah.onrender.com',
-        changeOrigin: true,
-        secure: true,
+    plugins: [react()],
+    base: process.env.VITE_BASE_PATH || "/Curio/",
+    server: {
+      proxy: {
+        '/api': {
+          target: 'https://curio-e9ah.onrender.com',
+          changeOrigin: true,
+          secure: true,
+        },
       },
     },
-  },
 })

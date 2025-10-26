@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import Notification from './Notification'
+import { API_BASE_URL } from './config'
 
 interface ProfileProps {
   onBackToHome: () => void
@@ -235,7 +236,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
 
     setIsLoadingComments(true)
     try {
-      const response = await fetch(`/api/post/post/${postId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/post/${postId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -268,7 +269,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     console.log('Submitting comment:', { postId: selectedPost.id, content: newComment.trim() })
     setIsSubmittingComment(true)
     try {
-      const response = await fetch(`/api/post/comment/${selectedPost.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/comment/${selectedPost.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -320,7 +321,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     try {
-      const response = await fetch(`/api/post/comment/${commentId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/comment/${commentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -361,7 +362,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     try {
-      const response = await fetch(`/api/post/like-comment/${commentId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/like-comment/${commentId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -408,7 +409,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     try {
-      const response = await fetch(`/api/post/like-post/${selectedPost.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/like-post/${selectedPost.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -455,7 +456,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/post/delete-post/${selectedPost.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/post/delete-post/${selectedPost.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

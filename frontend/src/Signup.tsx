@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './App.css'
 import Notification from './Notification'
+import { API_BASE_URL } from './config'
 
 interface SignupProps {
   onBackToHome: () => void
@@ -87,7 +88,7 @@ const Signup = ({ onBackToHome, onSignupSuccess, onNavigateToLogin }: SignupProp
     
     if (validateForm()) {
       try {
-        const response = await fetch('/api/auth/register', {
+        const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
