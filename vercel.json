@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://curio-e9ah.onrender.com/api/:path*"
+    }
+  ]
+}
+

@@ -7,9 +7,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'https://curio-e9ah.onrender.com',
         changeOrigin: true,
-        secure: false,
+        secure: true,
       },
     },
   },
