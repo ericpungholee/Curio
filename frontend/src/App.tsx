@@ -15,14 +15,36 @@ import 'reactflow/dist/style.css'
 import Signup from './Signup'
 import Login from './Login'
 import Profile from './Profile'
+import CreatePost from './CreatePost'
 
 // Types
 interface PostData {
+  id?: string
   avatar: string
   name: string
   username: string
   content: string
   image: string | null
+  image_url?: string
+  title?: string
+  created_at?: string
+  likes_count?: number
+  is_liked?: boolean
+  author_id?: string
+  comments?: Comment[]
+}
+
+interface Comment {
+  id: string
+  post_id: string
+  author_id: string
+  content: string
+  created_at: string
+  profiles?: {
+    username: string
+  }
+  likes_count?: number
+  is_liked?: boolean
 }
 
 interface PostCardNodeProps {
@@ -37,56 +59,288 @@ interface ModalProps {
 
 // Modal component for full card view
 const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
-  if (!isOpen || !postData) return null
+  const [comments, setComments] = useState<Comment[]>([])
+  const [newComment, setNewComment] = useState('')
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+  const [isLoadingComments, setIsLoadingComments] = useState(false)
+  const [currentPost, setCurrentPost] = useState<PostData | null>(null)
+  const [likesCount, setLikesCount] = useState(0)
+  const [isLiked, setIsLiked] = useState(false)
+
+  useEffect(() => {
+    if (isOpen && postData) {
+      console.log('PostModal opened with postData:', postData)
+      console.log('Image URL:', postData.image_url)
+      console.log('Image:', postData.image)
+      setCurrentPost(postData)
+      setLikesCount(postData.likes_count || 0)
+      setIsLiked(postData.is_liked || false)
+      if (postData.id) {
+        fetchComments(postData.id)
+      }
+    }
+  }, [isOpen, postData])
+
+  const fetchComments = async (postId: string) => {
+    const token = localStorage.getItem('access_token')
+    if (!token) return
+
+    setIsLoadingComments(true)
+    try {
+      const response = await fetch(`http://localhost:5000/api/post/post/${postId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setComments(data.post.comments || [])
+        setLikesCount(data.post.likes_count || 0)
+        setIsLiked(data.post.is_liked || false)
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+    } finally {
+      setIsLoadingComments(false)
+    }
+  }
+
+  const handleLikePost = async () => {
+    if (!currentPost?.id) return
+
+    const token = localStorage.getItem('access_token')
+    if (!token) {
+      alert('Please log in to like posts')
+      return
+    }
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/post/like-post/${currentPost.id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setIsLiked(data.liked)
+        setLikesCount(prev => data.liked ? prev + 1 : prev - 1)
+      }
+    } catch (error) {
+      console.error('Error liking post:', error)
+    }
+  }
+
+  const handleSubmitComment = async () => {
+    if (!currentPost?.id || !newComment.trim()) return
+
+    const token = localStorage.getItem('access_token')
+    if (!token) {
+      alert('Please log in to comment')
+      return
+    }
+
+    setIsSubmittingComment(true)
+    try {
+      const response = await fetch(`http://localhost:5000/api/post/comment/${currentPost.id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: newComment.trim()
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => [...prev, data.comment])
+        setNewComment('')
+      }
+    } catch (error) {
+      console.error('Error submitting comment:', error)
+    } finally {
+      setIsSubmittingComment(false)
+    }
+  }
+
+  const handleDeleteComment = async (commentId: string) => {
+    const token = localStorage.getItem('access_token')
+    if (!token) return
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/post/comment/${commentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        setComments(prev => prev.filter(c => c.id !== commentId))
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error)
+    }
+  }
+
+  const handleClose = () => {
+    setComments([])
+    setNewComment('')
+    setCurrentPost(null)
+    onClose()
+  }
+
+  if (!isOpen || !currentPost) return null
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
+    <div className="post-detail-modal-overlay" onClick={handleClose}>
+      <div className="post-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="post-detail-header">
+          <h2 className="post-detail-title">{currentPost.title || currentPost.content.substring(0, 50)}</h2>
+          <button 
+            className="post-detail-close-btn"
+            onClick={handleClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
         
-        <div className="modal-post">
-          <div className="modal-post-header">
-            <div className="modal-post-avatar">{postData.avatar}</div>
-            <div className="modal-post-user-info">
-              <strong>{postData.name}</strong>
-              <span className="modal-post-username">@{postData.username}</span>
+        <div className="post-detail-user-info">
+          <div className="post-detail-avatar">{currentPost.avatar}</div>
+          <div>
+            <strong>{currentPost.name}</strong>
+            <span className="post-detail-username">@{currentPost.username}</span>
+          </div>
+        </div>
+        
+        {(currentPost.image_url || currentPost.image) && (
+          <div className="post-detail-image">
+            <img 
+              src={currentPost.image_url || currentPost.image || ''} 
+              alt={currentPost.title || "Post"}
+              loading="lazy"
+              style={{ 
+                maxWidth: '100%', 
+                height: 'auto', 
+                width: 'auto',
+                maxHeight: '70vh',
+                objectFit: 'contain',
+                display: 'block'
+              }}
+              onError={(e) => {
+                console.error('Image failed to load:', currentPost.image_url || currentPost.image)
+                e.currentTarget.style.display = 'none'
+              }}
+              onLoad={(e) => {
+                const img = e.currentTarget
+                console.log('Image loaded successfully')
+                console.log('Image dimensions:', img.naturalWidth, 'x', img.naturalHeight)
+                console.log('Displayed dimensions:', img.width, 'x', img.height)
+                console.log('Image aspect ratio:', img.naturalWidth / img.naturalHeight)
+              }}
+            />
+          </div>
+        )}
+        
+        <div className="post-detail-content">
+          <p className="post-detail-text">{currentPost.content}</p>
+          <div className="post-detail-footer">
+            <div className="post-detail-actions">
+              <button
+                className={`post-like-btn ${isLiked ? 'liked' : ''}`}
+                onClick={handleLikePost}
+                aria-label={isLiked ? 'Unlike post' : 'Like post'}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+                <span>{likesCount}</span>
+              </button>
+            </div>
+            <div className="post-detail-meta">
+              <span className="post-detail-date">
+                {currentPost.created_at ? new Date(currentPost.created_at).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                }) : ''}
+              </span>
             </div>
           </div>
+        </div>
+
+        {/* Comments Section */}
+        <div className="comments-section">
+          <h3 className="comments-title">Comments ({comments.length})</h3>
           
-          <div className="modal-post-content">{postData.content}</div>
-          
-          {postData.image && (
-            <div className="modal-post-image">
-              <img src={postData.image} alt="Post" />
-            </div>
-          )}
-          
-          <div className="modal-post-footer">
-            <button className="modal-post-action">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14m-7-7h14" />
-              </svg>
-              12
+          {/* Add Comment Form */}
+          <div className="add-comment-form">
+            <textarea
+              className="comment-input"
+              placeholder="Write a comment..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              rows={3}
+              disabled={isSubmittingComment}
+            />
+            <button
+              className="comment-submit-btn"
+              onClick={handleSubmitComment}
+              disabled={!newComment.trim() || isSubmittingComment}
+            >
+              {isSubmittingComment ? 'Posting...' : 'Post Comment'}
             </button>
-            <button className="modal-post-action">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-              5
-            </button>
-            <button className="modal-post-action">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M17 1l4 4-4 4" />
-                <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                <path d="M7 23l-4-4 4-4" />
-                <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-              </svg>
-              8
-            </button>
+          </div>
+
+          {/* Comments List */}
+          <div className="comments-list">
+            {isLoadingComments ? (
+              <div className="comments-loading">
+                <div className="loading-spinner"></div>
+                <p>Loading comments...</p>
+              </div>
+            ) : comments.length > 0 ? (
+              comments.map((comment) => (
+                <div key={comment.id} className="comment-item">
+                  <div className="comment-header">
+                    <span className="comment-author">
+                      @{comment.profiles?.username || 'Unknown'}
+                    </span>
+                    <span className="comment-date">
+                      {new Date(comment.created_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                    <button
+                      className="comment-delete-btn"
+                      onClick={() => handleDeleteComment(comment.id)}
+                      aria-label="Delete comment"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <p className="comment-content">{comment.content}</p>
+                </div>
+              ))
+            ) : (
+              <div className="no-comments">
+                <p>No comments yet. Be the first to comment!</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -115,9 +369,9 @@ const PostCardNode = ({ data }: PostCardNodeProps) => {
         </div>
       </div>
       <div className="post-content">{data.content}</div>
-      {data.image && (
+      {(data.image_url || data.image) && (
         <div className="post-image">
-          <img src={data.image} alt="Post" />
+          <img src={data.image_url || data.image || ''} alt="Post" />
         </div>
       )}
       <div className="post-footer">
@@ -162,7 +416,7 @@ const INITIAL_NODES: Node[] = [
       name: 'John Doe',
       username: 'johndoe',
       content: 'Just shipped a new feature! 🚀 The team worked incredibly hard on this one. #webdev #coding',
-      image: null,
+      image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&h=600&fit=crop',
     },
   },
   {
@@ -235,7 +489,7 @@ function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(INITIAL_EDGES)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedPost, setSelectedPost] = useState<PostData | null>(null)
-  const [currentPage, setCurrentPage] = useState<'home' | 'signup' | 'login' | 'profile'>('home')
+  const [currentPage, setCurrentPage] = useState<'home' | 'signup' | 'login' | 'profile' | 'create-post'>('home')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -287,7 +541,7 @@ function App() {
     if (token) {
       try {
         // Call backend logout endpoint
-        await fetch('/api/auth/logout', {
+        await fetch('http://localhost:5000/api/auth/logout', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -311,6 +565,15 @@ function App() {
     setCurrentPage('profile')
   }, [])
 
+  const handleNavigateToCreatePost = useCallback(() => {
+    setCurrentPage('create-post')
+  }, [])
+
+  const handlePostCreated = useCallback(() => {
+    setCurrentPage('home')
+    // TODO: Refresh posts or add new post to the graph
+  }, [])
+
   // Check authentication status on app load
   useEffect(() => {
     const checkAuthStatus = async () => {
@@ -320,7 +583,7 @@ function App() {
       if (token && userId) {
         try {
           // Verify token is still valid by making a request to profile endpoint
-          const response = await fetch('/api/auth/profile', {
+          const response = await fetch('http://localhost:5000/api/auth/profile', {
             method: 'GET',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -377,6 +640,10 @@ function App() {
     return <Profile onBackToHome={handleBackToHome} onLogout={handleLogout} />
   }
 
+  if (currentPage === 'create-post') {
+    return <CreatePost onBackToHome={handleBackToHome} onPostCreated={handlePostCreated} />
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -395,11 +662,13 @@ function App() {
             </div>
           </div>
           <div className="nav-links">
-            <button className="nav-icon-btn" title="Add">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 5v14m-7-7h14"/>
-              </svg>
-            </button>
+            {isLoggedIn && (
+              <button className="nav-icon-btn" title="Create Post" onClick={handleNavigateToCreatePost}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14m-7-7h14"/>
+                </svg>
+              </button>
+            )}
             <button className="nav-icon-btn" title="Profile" onClick={handleNavigateToProfile}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
