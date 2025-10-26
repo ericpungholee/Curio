@@ -656,41 +656,43 @@ function App() {
               </svg>
             </div>
           </div>
-          <div className="nav-links">
-            {isLoggedIn && (
-              <button className="nav-icon-btn" title="Create Post" onClick={handleNavigateToCreatePost}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 5v14m-7-7h14"/>
-                </svg>
-              </button>
-            )}
-            {isLoggedIn && (
-              <button className="nav-icon-btn" title="Profile" onClick={handleNavigateToProfile}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="3"/>
-                </svg>
-              </button>
-            )}
-            {!isLoggedIn && (
-              <button className="nav-icon-btn" title="Sign Up" onClick={handleNavigateToSignup}>
-                <svg width="24" height="24" viewBox="0 -960 960 960" fill="currentColor">
-                  <path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/>
-                </svg>
-              </button>
-            )}
-            {isLoggedIn && (
-              <button className="nav-icon-btn" title="Logout" onClick={handleLogout}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                  <polyline points="16 17 21 12 16 7"/>
-                  <line x1="21" x2="9" y1="12" y2="12"/>
-                </svg>
-              </button>
-            )}
-          </div>
         </nav>
       </header>
+      
+      {/* Nav buttons in top right */}
+      <div className="nav-buttons-top-right">
+        {isLoggedIn && (
+          <button className="nav-icon-btn" title="Create Post" onClick={handleNavigateToCreatePost}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14m-7-7h14"/>
+            </svg>
+          </button>
+        )}
+        {isLoggedIn && (
+          <button className="nav-icon-btn" title="Profile" onClick={handleNavigateToProfile}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="3"/>
+            </svg>
+          </button>
+        )}
+        {!isLoggedIn && (
+          <button className="nav-icon-btn" title="Sign Up" onClick={handleNavigateToSignup}>
+            <svg width="24" height="24" viewBox="0 -960 960 960" fill="currentColor">
+              <path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/>
+            </svg>
+          </button>
+        )}
+        {isLoggedIn && (
+          <button className="nav-icon-btn" title="Logout" onClick={handleLogout}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" x2="9" y1="12" y2="12"/>
+            </svg>
+          </button>
+        )}
+      </div>
       
       {/* Floating Logo */}
       <div className="floating-logo" onClick={handleBackToHome}>
