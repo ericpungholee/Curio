@@ -203,6 +203,11 @@ const CreatePost: React.FC<CreatePostProps> = ({ onBackToHome, onPostCreated }) 
 
   return (
     <div className="create-post-page">
+      {/* Floating Logo */}
+      <div className="floating-logo" onClick={onBackToHome}>
+        <img src="/curio.png" alt="Curio Logo" className="logo" />
+      </div>
+
       {/* Back Button */}
       <button className="back-button" onClick={onBackToHome}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
