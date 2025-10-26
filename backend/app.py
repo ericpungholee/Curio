@@ -10,18 +10,7 @@ app = Flask(__name__)
 # Configure CORS - allow all origins to support Vercel deployments
 # This allows the frontend from any domain to access the API
 CORS(app,
-     origins=[
-         "http://localhost:3000",
-         "http://localhost:5173", 
-         "http://localhost:5174",
-         "http://127.0.0.1:3000",
-         "http://127.0.0.1:5173",
-         "http://127.0.0.1:5174",
-         "https://curio-git-main-haokai-xuans-projects.vercel.app",
-         "https://curio-fyrn30lad-haokai-xuans-projects.vercel.app",
-         "https://curio-lake-two.vercel.app",
-         "*"  # Allow all origins
-     ],
+     origins="*",  # Allow all origins for Vercel preview deployments
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      supports_credentials=False)
