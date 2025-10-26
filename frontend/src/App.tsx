@@ -406,11 +406,15 @@ const NODE_TYPES = {
   postCard: PostCardNode,
 } as const
 
+// Center coordinates (assuming typical screen size)
+const CENTER_X = 0
+const CENTER_Y = 0
+
 const INITIAL_NODES: Node[] = [
   {
     id: '1',
     type: 'postCard',
-    position: { x: 100, y: 100 },
+    position: { x: CENTER_X - 350, y: CENTER_Y - 200 },
     data: {
       avatar: '👤',
       name: 'John Doe',
@@ -422,7 +426,7 @@ const INITIAL_NODES: Node[] = [
   {
     id: '2',
     type: 'postCard',
-    position: { x: 500, y: 100 },
+    position: { x: CENTER_X + 200, y: CENTER_Y - 200 },
     data: {
       avatar: '👨‍💻',
       name: 'Jane Smith',
@@ -434,7 +438,7 @@ const INITIAL_NODES: Node[] = [
   {
     id: '3',
     type: 'postCard',
-    position: { x: 100, y: 450 },
+    position: { x: CENTER_X - 350, y: CENTER_Y + 150 },
     data: {
       avatar: '🧑‍💼',
       name: 'Bob Wilson',
@@ -446,7 +450,7 @@ const INITIAL_NODES: Node[] = [
   {
     id: '4',
     type: 'postCard',
-    position: { x: 500, y: 450 },
+    position: { x: CENTER_X + 200, y: CENTER_Y + 150 },
     data: {
       avatar: '👩‍🎨',
       name: 'Alice Johnson',
@@ -703,7 +707,7 @@ function App() {
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           nodeTypes={NODE_TYPES}
-          defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+          defaultViewport={{ x: -150, y: -75, zoom: 0.6 }}
           style={{ width: '100%', height: '100%' }}
         >
           <Background gap={20} size={2} color="rgba(255, 255, 255, 0.2)" />
