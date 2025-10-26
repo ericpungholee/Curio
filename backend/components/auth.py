@@ -6,11 +6,14 @@ auth_bp = Blueprint("auth", __name__)
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
+    print("=== Registration request received ===")
     try:
         body = request.get_json()
         if not body:
+            print("ERROR: Request body is empty")
             return jsonify({"error": "Request body is required"}), 400
-    except Exception:
+    except Exception as e:
+        print(f"ERROR: Failed to parse request body: {e}")
         return jsonify({"error": "Request body is required"}), 400
     
     try:
@@ -19,8 +22,11 @@ def register():
         username = body.get("username")
         firstName = body.get("firstName")
         lastName = body.get("lastName")
+        
+        print(f"Registration attempt for: email={email}, username={username}")
 
         if not email or not password or not username:
+            print("ERROR: Missing required fields")
             return jsonify({"error": "Email, password, and username are required"}), 400
 
         # Check if username already exists
@@ -32,24 +38,52 @@ def register():
             print(f"Error checking username: {e}")
 
         # Register user with Supabase Auth
-        resp = supabase.auth.sign_up({
-            "email": email,
-            "password": password,
-            "options": {
-                "data": {
-                    "username": username,
-                    "firstName": firstName or "",
-                    "lastName": lastName or ""
+        def signup_call():
+            return supabase.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "username": username,
+                        "firstName": firstName or "",
+                        "lastName": lastName or ""
+                    }
                 }
-            }
-        })
+            })
+        
+        try:
+            resp = retry_supabase_auth_call(signup_call)
+        except Exception as auth_error:
+            error_str = str(auth_error).lower()
+            print(f"Auth signup error: {auth_error}")
+            
+            # Handle specific errors
+            if "already registered" in error_str or "user already exists" in error_str:
+                print(f"User already registered: {email}")
+                return jsonify({"error": "Email already registered"}), 400
+            elif "invalid" in error_str and "email" in error_str:
+                return jsonify({"error": "Invalid email address"}), 400
+            else:
+                return jsonify({"error": f"Registration failed: {str(auth_error)}"}), 500
+        
+        # Check if response is None (retry failed)
+        if resp is None:
+            return jsonify({"error": "Registration failed: Unable to connect to authentication service"}), 500
         
         # Check for errors in response
         if hasattr(resp, 'error') and resp.error:
-            return jsonify({"error": f"Signup failed: {resp.error}"}), 400
+            error_msg = str(resp.error)
+            print(f"Supabase signup error: {error_msg}")
+            
+            # Check if it's a "user already exists" error
+            if "already registered" in error_msg.lower() or "user already exists" in error_msg.lower():
+                return jsonify({"error": "Email already registered"}), 400
+            
+            return jsonify({"error": f"Signup failed: {error_msg}"}), 400
 
-        if resp.user is None:
-            return jsonify({"error": "Signup failed"}), 400
+        if not hasattr(resp, 'user') or resp.user is None:
+            print(f"Signup failed: No user in response. Response: {resp}")
+            return jsonify({"error": "Signup failed: No user created"}), 400
 
         # Create profile record after successful signup
         try:
@@ -68,13 +102,20 @@ def register():
         except Exception as profile_error:
             print(f"Profile creation error: {profile_error}")
 
+        print(f"Registration successful for user {resp.user.id}")
         return jsonify({
             "message": "Registered successfully. Check your email.",
             "user_id": resp.user.id,
             "username": username
         }), 201
     except Exception as e:
+        error_str = str(e).lower()
         print(f"Register error: {e}")
+        
+        # Handle specific error cases
+        if "already registered" in error_str or "user already exists" in error_str:
+            return jsonify({"error": "Email already registered"}), 400
+        
         return jsonify({"error": f"Registration failed: {str(e)}"}), 500
 
 
