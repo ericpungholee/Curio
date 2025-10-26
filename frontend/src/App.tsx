@@ -1,5 +1,5 @@
 import './App.css'
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import ReactFlow, {
   Background,
   Handle,
@@ -12,6 +12,9 @@ import ReactFlow, {
   type Node,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import Signup from './Signup'
+import Login from './Login'
+import Profile from './Profile'
 
 // Types
 interface PostData {
@@ -232,6 +235,9 @@ function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(INITIAL_EDGES)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedPost, setSelectedPost] = useState<PostData | null>(null)
+  const [currentPage, setCurrentPage] = useState<'home' | 'signup' | 'login' | 'profile'>('home')
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -239,7 +245,6 @@ function App() {
   )
 
   const handleCardClick = useCallback((postData: PostData) => {
-    console.log('Modal opening for:', postData.name) // Debug log
     setSelectedPost(postData)
     setIsModalOpen(true)
   }, [])
@@ -250,14 +255,127 @@ function App() {
   }, [])
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
-    console.log('Node clicked:', node.type, node.data) // Debug log
     if (node.type === 'postCard') {
-      console.log('Opening modal for post card')
       handleCardClick(node.data as PostData)
-    } else {
-      console.log('Not a post card, type:', node.type)
     }
   }, [handleCardClick])
+
+  const handleNavigateToSignup = useCallback(() => {
+    setCurrentPage('signup')
+  }, [])
+
+  const handleNavigateToLogin = useCallback(() => {
+    setCurrentPage('login')
+  }, [])
+
+  const handleBackToHome = useCallback(() => {
+    setCurrentPage('home')
+  }, [])
+
+  const handleSignupSuccess = useCallback(() => {
+    setCurrentPage('login')
+  }, [])
+
+  const handleLogin = useCallback(() => {
+    setIsLoggedIn(true)
+    setCurrentPage('home')
+  }, [])
+
+  const handleLogout = useCallback(async () => {
+    const token = localStorage.getItem('access_token')
+    
+    if (token) {
+      try {
+        // Call backend logout endpoint
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+      } catch (error) {
+        console.error('Logout API call failed:', error)
+        // Continue with logout even if API call fails
+      }
+    }
+    
+    // Always clear local storage and update state
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('user_id')
+    setIsLoggedIn(false)
+    setCurrentPage('home')
+  }, [])
+
+  const handleNavigateToProfile = useCallback(() => {
+    setCurrentPage('profile')
+  }, [])
+
+  // Check authentication status on app load
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      const token = localStorage.getItem('access_token')
+      const userId = localStorage.getItem('user_id')
+      
+      if (token && userId) {
+        try {
+          // Verify token is still valid by making a request to profile endpoint
+          const response = await fetch('/api/auth/profile', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          })
+          
+          if (response.ok) {
+            setIsLoggedIn(true)
+          } else if (response.status === 401) {
+            // Only clear storage on 401 (Unauthorized)
+            localStorage.removeItem('access_token')
+            localStorage.removeItem('user_id')
+            setIsLoggedIn(false)
+          } else {
+            // Other errors (network, server errors), keep user logged in
+            setIsLoggedIn(true)
+          }
+        } catch (error) {
+          console.error('Auth check failed:', error)
+          // Network error, keep user logged in to avoid signouts
+          setIsLoggedIn(true)
+        }
+      } else {
+        setIsLoggedIn(false)
+      }
+      setIsLoading(false)
+    }
+
+    checkAuthStatus()
+  }, [])
+
+  // Show loading spinner while checking auth status
+  if (isLoading) {
+    return (
+      <div className="app">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (currentPage === 'signup') {
+    return <Signup onBackToHome={handleBackToHome} onSignupSuccess={handleSignupSuccess} onNavigateToLogin={handleNavigateToLogin} />
+  }
+
+  if (currentPage === 'login') {
+    return <Login onBackToHome={handleBackToHome} onLogin={handleLogin} onNavigateToSignup={handleNavigateToSignup} />
+  }
+
+  if (currentPage === 'profile') {
+    return <Profile onBackToHome={handleBackToHome} onLogout={handleLogout} />
+  }
 
   return (
     <div className="app">
@@ -282,12 +400,22 @@ function App() {
                 <path d="M12 5v14m-7-7h14"/>
               </svg>
             </button>
-            <button className="nav-icon-btn" title="Profile">
+            <button className="nav-icon-btn" title="Profile" onClick={handleNavigateToProfile}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                 <circle cx="12" cy="7" r="3"/>
               </svg>
             </button>
+            {!isLoggedIn && (
+              <button className="signup-nav-btn" onClick={handleNavigateToSignup}>
+                Sign Up
+              </button>
+            )}
+            {isLoggedIn && (
+              <button className="signup-nav-btn" onClick={handleLogout}>
+                Logout
+              </button>
+            )}
           </div>
         </nav>
       </header>

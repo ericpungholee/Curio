@@ -1,12 +1,12 @@
 from flask import Blueprint, request, jsonify
-from .auth import supabase, get_user_id_from_token
+from .common import supabase, get_user_id_from_token
 
 posts_bp = Blueprint("posts", __name__)
 
 @posts_bp.route("/create-post", methods=["POST"])
 def create_post():
     # Get the current logged-in user's ID
-    user_id = get_user_id_from_token()
+    user_id = get_user_id_from_token(request)
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     
