@@ -671,8 +671,10 @@ function App() {
               </svg>
             </button>
             {!isLoggedIn && (
-              <button className="signup-nav-btn" onClick={handleNavigateToSignup}>
-                Sign Up
+              <button className="nav-icon-btn" title="Sign Up" onClick={handleNavigateToSignup}>
+                <svg width="24" height="24" viewBox="0 -960 960 960" fill="currentColor">
+                  <path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/>
+                </svg>
               </button>
             )}
             {isLoggedIn && (
