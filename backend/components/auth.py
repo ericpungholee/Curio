@@ -6,11 +6,14 @@ auth_bp = Blueprint("auth", __name__)
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
+    print("=== Registration request received ===")
     try:
         body = request.get_json()
         if not body:
+            print("ERROR: Request body is empty")
             return jsonify({"error": "Request body is required"}), 400
-    except Exception:
+    except Exception as e:
+        print(f"ERROR: Failed to parse request body: {e}")
         return jsonify({"error": "Request body is required"}), 400
     
     try:
@@ -19,8 +22,11 @@ def register():
         username = body.get("username")
         firstName = body.get("firstName")
         lastName = body.get("lastName")
+        
+        print(f"Registration attempt for: email={email}, username={username}")
 
         if not email or not password or not username:
+            print("ERROR: Missing required fields")
             return jsonify({"error": "Email, password, and username are required"}), 400
 
         # Check if username already exists
@@ -32,24 +38,52 @@ def register():
             print(f"Error checking username: {e}")
 
         # Register user with Supabase Auth
-        resp = supabase.auth.sign_up({
-            "email": email,
-            "password": password,
-            "options": {
-                "data": {
-                    "username": username,
-                    "firstName": firstName or "",
-                    "lastName": lastName or ""
+        def signup_call():
+            return supabase.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "username": username,
+                        "firstName": firstName or "",
+                        "lastName": lastName or ""
+                    }
                 }
-            }
-        })
+            })
+        
+        try:
+            resp = retry_supabase_auth_call(signup_call)
+        except Exception as auth_error:
+            error_str = str(auth_error).lower()
+            print(f"Auth signup error: {auth_error}")
+            
+            # Handle specific errors
+            if "already registered" in error_str or "user already exists" in error_str:
+                print(f"User already registered: {email}")
+                return jsonify({"error": "Email already registered"}), 400
+            elif "invalid" in error_str and "email" in error_str:
+                return jsonify({"error": "Invalid email address"}), 400
+            else:
+                return jsonify({"error": f"Registration failed: {str(auth_error)}"}), 500
+        
+        # Check if response is None (retry failed)
+        if resp is None:
+            return jsonify({"error": "Registration failed: Unable to connect to authentication service"}), 500
         
         # Check for errors in response
         if hasattr(resp, 'error') and resp.error:
-            return jsonify({"error": f"Signup failed: {resp.error}"}), 400
+            error_msg = str(resp.error)
+            print(f"Supabase signup error: {error_msg}")
+            
+            # Check if it's a "user already exists" error
+            if "already registered" in error_msg.lower() or "user already exists" in error_msg.lower():
+                return jsonify({"error": "Email already registered"}), 400
+            
+            return jsonify({"error": f"Signup failed: {error_msg}"}), 400
 
-        if resp.user is None:
-            return jsonify({"error": "Signup failed"}), 400
+        if not hasattr(resp, 'user') or resp.user is None:
+            print(f"Signup failed: No user in response. Response: {resp}")
+            return jsonify({"error": "Signup failed: No user created"}), 400
 
         # Create profile record after successful signup
         try:
@@ -68,13 +102,20 @@ def register():
         except Exception as profile_error:
             print(f"Profile creation error: {profile_error}")
 
+        print(f"Registration successful for user {resp.user.id}")
         return jsonify({
             "message": "Registered successfully. Check your email.",
             "user_id": resp.user.id,
             "username": username
         }), 201
     except Exception as e:
+        error_str = str(e).lower()
         print(f"Register error: {e}")
+        
+        # Handle specific error cases
+        if "already registered" in error_str or "user already exists" in error_str:
+            return jsonify({"error": "Email already registered"}), 400
+        
         return jsonify({"error": f"Registration failed: {str(e)}"}), 500
 
 
@@ -136,13 +177,16 @@ def get_profile():
             token = auth_header.split(" ")[1]
             return supabase.auth.get_user(token)
         
-        response = retry_supabase_auth_call(auth_call)
+        response = retry_supabase_auth_call(auth_call, suppress_expired_token_log=True)
         if response and response.user:
             user_metadata = response.user.user_metadata or {}
         else:
             return jsonify({"error": "Unauthorized"}), 401
     except Exception as e:
-        print(f"JWT verification error: {e}")
+        # Only log if it's not an expired token error
+        error_str = str(e).lower()
+        if "token is expired" not in error_str and "token has invalid claims" not in error_str:
+            print(f"JWT verification error: {e}")
         return jsonify({"error": "Unauthorized"}), 401
 
     # Get profile data from profiles table
@@ -195,7 +239,7 @@ def check_username():
 
 @auth_bp.route("/profile/upload-pic", methods=["POST"])
 def upload_profile_pic():
-    user_id = get_user_id_from_token()
+    user_id = get_user_id_from_token(request)
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
@@ -270,6 +314,43 @@ def get_profile_pic(user_id):
         print(f"Get profile pic error: {e}")
         return jsonify({"error": f"Failed to get profile picture: {str(e)}"}), 500
 
+@auth_bp.route("/refresh", methods=["POST"])
+def refresh_token():
+    """
+    Refresh the access token using the refresh token
+    """
+    try:
+        body = request.get_json()
+        if not body:
+            return jsonify({"error": "Request body is required"}), 400
+        
+        refresh_token = body.get("refresh_token")
+        if not refresh_token:
+            return jsonify({"error": "Refresh token is required"}), 400
+
+        def refresh_call():
+            return supabase.auth.refresh_session(refresh_token)
+        
+        resp = retry_supabase_auth_call(refresh_call)
+        
+        # Check if response has errors
+        if hasattr(resp, 'error') and resp.error:
+            print(f"Token refresh error: {resp.error}")
+            return jsonify({"error": "Invalid refresh token"}), 401
+
+        session = getattr(resp, "session", None)
+        if not session:
+            return jsonify({"error": "Failed to refresh token"}), 401
+
+        return jsonify({
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "user_id": resp.user.id
+        })
+    except Exception as e:
+        print(f"Token refresh error: {e}")
+        return jsonify({"error": f"Token refresh failed: {str(e)}"}), 500
+
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     try:
@@ -278,10 +359,11 @@ def logout():
             token = auth_header.split(" ")[1]
             try:
                 # Sign out the user from Supabase
-                supabase.auth.sign_out(token)
+                # Use sign_out() without parameters to sign out the current session
+                supabase.auth.sign_out()
             except Exception as e:
-                print(f"Supabase logout error: {e}")
-                # Continue with logout even if Supabase call fails
+                # Silently continue with logout even if Supabase call fails
+                pass
         
         return jsonify({"message": "Logged out successfully"}), 200
     except Exception as e:

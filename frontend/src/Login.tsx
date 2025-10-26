@@ -63,7 +63,7 @@ const Login = ({ onBackToHome, onLogin, onNavigateToSignup }: LoginProps) => {
     
     if (validateForm()) {
       try {
-        const response = await fetch('http://localhost:5000/api/auth/login', {
+        const response = await fetch('/api/auth/login', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -125,7 +125,7 @@ const Login = ({ onBackToHome, onLogin, onNavigateToSignup }: LoginProps) => {
   return (
     <div className="signup-page">
       {/* Floating Logo */}
-      <div className="floating-logo">
+      <div className="floating-logo" onClick={onBackToHome}>
         <img src="/curio.png" alt="Curio Logo" className="logo" />
       </div>
 

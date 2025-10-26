@@ -77,7 +77,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onBackToHome, onPostCreated }) 
       formData.append('file', imageFile)
 
       const token = localStorage.getItem('access_token')
-      const response = await fetch('http://localhost:5000/api/post/upload-image', {
+      const response = await fetch('/api/post/upload-image', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -146,7 +146,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onBackToHome, onPostCreated }) 
         ...(imageUrl && { image_url: imageUrl })
       }
 
-      const response = await fetch('http://localhost:5000/api/post/create-post', {
+      const response = await fetch('/api/post/create-post', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

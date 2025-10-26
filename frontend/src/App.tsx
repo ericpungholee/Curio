@@ -20,11 +20,12 @@ import CreatePost from './CreatePost'
 // Types
 interface PostData {
   id?: string
-  avatar: string
-  name: string
-  username: string
+  avatar?: string
+  name?: string
+  username?: string
+  email?: string
   content: string
-  image: string | null
+  image?: string | null
   image_url?: string
   title?: string
   created_at?: string
@@ -55,10 +56,161 @@ interface ModalProps {
   isOpen: boolean
   onClose: () => void
   postData: PostData | null
+  onBackToHome?: () => void
+}
+
+interface EdgeOverlayProps {
+  isOpen: boolean
+  onClose: () => void
+  relationship: string
+  similarity: number
+  post1Id?: string
+  post2Id?: string
+  onBackToHome?: () => void
+}
+
+// Edge Overlay Component
+const EdgeOverlay = ({ isOpen, onClose, relationship, similarity, post1Id, post2Id, onBackToHome }: EdgeOverlayProps) => {
+  const [relationshipDetails, setRelationshipDetails] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    if (isOpen && post1Id && post2Id) {
+      fetchRelationshipDetails()
+    }
+  }, [isOpen, post1Id, post2Id])
+
+  const fetchRelationshipDetails = async () => {
+    setIsLoading(true)
+    const token = localStorage.getItem('access_token')
+    
+    try {
+      const response = await fetch('/api/graph/relationship-details', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: JSON.stringify({
+          post1_id: post1Id,
+          post2_id: post2Id
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setRelationshipDetails(data)
+      }
+    } catch (error) {
+      console.error('Error fetching relationship details:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCurioClick = () => {
+    onClose() // Just close the overlay, don't navigate
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="post-detail-modal-overlay" onClick={onClose}>
+      {/* Floating Logo - close overlay when clicked */}
+      <div className="floating-logo" onClick={handleCurioClick}>
+        <img src="/curio.png" alt="Curio Logo" className="logo" />
+      </div>
+      <div className="post-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="post-detail-header">
+          <h2 className="post-detail-title">Relationship Analysis</h2>
+          <button 
+            className="post-detail-close-btn"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        
+        {isLoading ? (
+          <div className="comments-loading">
+            <div className="loading-spinner"></div>
+            <p>AI is analyzing the relationship...</p>
+          </div>
+        ) : relationshipDetails ? (
+          <>
+            <div className="post-detail-content">
+              <div className="post-detail-footer" style={{ marginBottom: '20px' }}>
+                <div className="similarity-badge">
+                  Similarity Score: {(similarity * 100).toFixed(1)}%
+                </div>
+              </div>
+
+              {relationshipDetails.analysis && (
+                                 <div className="relationship-section" style={{ 
+                   background: 'rgba(255, 255, 255, 0.05)', 
+                   padding: '20px', 
+                   borderRadius: '12px',
+                   marginBottom: '20px'
+                 }}>
+                   <h3 className="relationship-subtitle" style={{ marginBottom: '15px', color: '#fff' }}>
+                     AI Analysis
+                   </h3>
+                  <div 
+                    className="relationship-text" 
+                    style={{ 
+                      whiteSpace: 'pre-wrap', 
+                      lineHeight: '1.8',
+                      fontSize: '14px',
+                      color: 'rgba(255, 255, 255, 0.9)'
+                    }}
+                  >
+                    {relationshipDetails.analysis}
+                  </div>
+                </div>
+              )}
+              
+              <div className="relationship-posts-preview">
+                <div className="relationship-post-card">
+                  <div className="relationship-post-header">
+                    <div className="relationship-post-avatar">
+                      {relationshipDetails.post1.username?.charAt(0).toUpperCase() || '?'}
+                    </div>
+                    <div className="relationship-post-info">
+                      <strong>{relationshipDetails.post1.username || 'Unknown'}</strong>
+                      <span style={{ fontSize: '12px', opacity: 0.7, marginLeft: '8px' }}>({relationshipDetails.post1.label || 'Post 1'})</span>
+                    </div>
+                  </div>
+                  <h4 className="relationship-post-title">{relationshipDetails.post1.title || 'No title'}</h4>
+                  <p className="relationship-post-content-preview">{relationshipDetails.post1.content_preview}</p>
+                </div>
+                
+                <div className="relationship-posts-connector">→</div>
+                
+                <div className="relationship-post-card">
+                  <div className="relationship-post-header">
+                    <div className="relationship-post-avatar">
+                      {relationshipDetails.post2.username?.charAt(0).toUpperCase() || '?'}
+                    </div>
+                    <div className="relationship-post-info">
+                      <strong>{relationshipDetails.post2.username || 'Unknown'}</strong>
+                      <span style={{ fontSize: '12px', opacity: 0.7, marginLeft: '8px' }}>({relationshipDetails.post2.label || 'Post 2'})</span>
+                    </div>
+                  </div>
+                  <h4 className="relationship-post-title">{relationshipDetails.post2.title || 'No title'}</h4>
+                  <p className="relationship-post-content-preview">{relationshipDetails.post2.content_preview}</p>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 // Modal component for full card view
-const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
+const PostModal = ({ isOpen, onClose, postData, onBackToHome }: ModalProps) => {
   const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState('')
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
@@ -69,9 +221,6 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
 
   useEffect(() => {
     if (isOpen && postData) {
-      console.log('PostModal opened with postData:', postData)
-      console.log('Image URL:', postData.image_url)
-      console.log('Image:', postData.image)
       setCurrentPost(postData)
       setLikesCount(postData.likes_count || 0)
       setIsLiked(postData.is_liked || false)
@@ -82,17 +231,22 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
   }, [isOpen, postData])
 
   const fetchComments = async (postId: string) => {
+    // Comments are now visible to everyone, including non-logged-in users
     const token = localStorage.getItem('access_token')
-    if (!token) return
 
     setIsLoadingComments(true)
     try {
-      const response = await fetch(`http://localhost:5000/api/post/post/${postId}`, {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      // Only add Authorization header if token exists
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(`/api/post/post/${postId}`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
       })
 
       if (response.ok) {
@@ -100,6 +254,16 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
         setComments(data.post.comments || [])
         setLikesCount(data.post.likes_count || 0)
         setIsLiked(data.post.is_liked || false)
+        
+        // Update currentPost with profile data if available
+        if (data.post.profiles) {
+          setCurrentPost(prev => prev ? {
+            ...prev,
+            username: data.post.profiles.username || prev.username,
+            email: data.post.profiles.email || prev.email,
+            avatar: data.post.profiles.profile_pic_url || prev.avatar
+          } : prev)
+        }
       }
     } catch (error) {
       console.error('Error fetching comments:', error)
@@ -118,7 +282,7 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/post/like-post/${currentPost.id}`, {
+      const response = await fetch(`/api/post/like-post/${currentPost.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -147,7 +311,7 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
 
     setIsSubmittingComment(true)
     try {
-      const response = await fetch(`http://localhost:5000/api/post/comment/${currentPost.id}`, {
+      const response = await fetch(`/api/post/comment/${currentPost.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -175,7 +339,7 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
     if (!token) return
 
     try {
-      const response = await fetch(`http://localhost:5000/api/post/comment/${commentId}`, {
+      const response = await fetch(`/api/post/comment/${commentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -200,8 +364,24 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
 
   if (!isOpen || !currentPost) return null
 
+  const getAvatar = (username?: string, avatar?: string) => {
+    if (avatar && avatar.startsWith('http')) {
+      return <img src={avatar} alt={username || 'User'} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+    }
+    if (!username) return '👤'
+    return username.charAt(0).toUpperCase()
+  }
+
+  const handleCurioClick = () => {
+    handleClose() // Just close the modal, don't navigate
+  }
+
   return (
     <div className="post-detail-modal-overlay" onClick={handleClose}>
+      {/* Floating Logo - close modal when clicked */}
+      <div className="floating-logo" onClick={handleCurioClick}>
+        <img src="/curio.png" alt="Curio Logo" className="logo" />
+      </div>
       <div className="post-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="post-detail-header">
           <h2 className="post-detail-title">{currentPost.title || currentPost.content.substring(0, 50)}</h2>
@@ -215,10 +395,10 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
         </div>
         
         <div className="post-detail-user-info">
-          <div className="post-detail-avatar">{currentPost.avatar}</div>
+          <div className="post-detail-avatar">{getAvatar(currentPost.username, currentPost.avatar)}</div>
           <div>
-            <strong>{currentPost.name}</strong>
-            <span className="post-detail-username">@{currentPost.username}</span>
+            <strong>{currentPost.username || 'User'}</strong>
+            {currentPost.email && <span className="post-detail-username">{currentPost.email}</span>}
           </div>
         </div>
         
@@ -237,15 +417,7 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
                 display: 'block'
               }}
               onError={(e) => {
-                console.error('Image failed to load:', currentPost.image_url || currentPost.image)
                 e.currentTarget.style.display = 'none'
-              }}
-              onLoad={(e) => {
-                const img = e.currentTarget
-                console.log('Image loaded successfully')
-                console.log('Image dimensions:', img.naturalWidth, 'x', img.naturalHeight)
-                console.log('Displayed dimensions:', img.width, 'x', img.height)
-                console.log('Image aspect ratio:', img.naturalWidth / img.naturalHeight)
               }}
             />
           </div>
@@ -278,11 +450,9 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
           </div>
         </div>
 
-        {/* Comments Section */}
         <div className="comments-section">
           <h3 className="comments-title">Comments ({comments.length})</h3>
           
-          {/* Add Comment Form */}
           <div className="add-comment-form">
             <textarea
               className="comment-input"
@@ -301,7 +471,6 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
             </button>
           </div>
 
-          {/* Comments List */}
           <div className="comments-list">
             {isLoadingComments ? (
               <div className="comments-loading">
@@ -350,44 +519,67 @@ const PostModal = ({ isOpen, onClose, postData }: ModalProps) => {
 
 // Custom node component that looks like a Twitter post card
 const PostCardNode = ({ data }: PostCardNodeProps) => {
+  const isQueryNode = data.id === 'query_node' || data.id === 'query-root' || data.is_query
+  const nodeTitle = data.title || data.content?.substring(0, 50) || 'Post'
+  
+  // Truncate content to max 150 characters for display
+  const truncatedContent = data.content?.length > 150 
+    ? data.content.substring(0, 150) + '...' 
+    : data.content
+
+  const renderAvatar = () => {
+    if (isQueryNode) {
+      return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+      )
+    }
+    if (data.avatar && data.avatar.startsWith('http')) {
+      return <img src={data.avatar} alt={data.username || 'User'} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+    }
+    return data.username?.charAt(0).toUpperCase() || '👤'
+  }
+
   return (
     <div className="post-card-node">
-      <Handle type="source" position={Position.Right} />
-      <Handle type="source" position={Position.Left} />
-      <Handle type="source" position={Position.Top} />
-      <Handle type="source" position={Position.Bottom} />
-      <Handle type="target" position={Position.Right} />
-      <Handle type="target" position={Position.Left} />
-      <Handle type="target" position={Position.Top} />
-      <Handle type="target" position={Position.Bottom} />
+      <Handle type="target" position={Position.Top} id="a" />
+      <Handle type="target" position={Position.Left} id="b" />
+      <Handle type="source" position={Position.Right} id="c" />
+      <Handle type="source" position={Position.Bottom} id="d" />
       
       <div className="post-header">
-        <div className="post-avatar">{data.avatar}</div>
+        <div className="post-avatar">
+          {renderAvatar()}
+        </div>
         <div className="post-user-info">
-          <strong>{data.name}</strong>
-          <span className="post-username">@{data.username}</span>
+          <strong>{data.username || 'User'}</strong>
         </div>
       </div>
-      <div className="post-content">{data.content}</div>
-      {(data.image_url || data.image) && (
+      {isQueryNode ? (
+        <div className="post-title">{nodeTitle}</div>
+      ) : (
+        <>
+          {data.title && <div className="post-title">{data.title}</div>}
+          <div className="post-content">{truncatedContent}</div>
+        </>
+      )}
+      {!isQueryNode && (data.image_url || data.image) && (
         <div className="post-image">
           <img src={data.image_url || data.image || ''} alt="Post" />
         </div>
       )}
-      <div className="post-footer">
-        <button className="post-action">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-          12
-        </button>
-        <button className="post-action">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          5
-        </button>
-      </div>
+      {!isQueryNode && (
+        <div className="post-footer">
+          <button className="post-action">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            {data.likes_count || 0}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -397,96 +589,23 @@ const NODE_TYPES = {
   postCard: PostCardNode,
 } as const
 
-// Center coordinates to center nodes on screen
-const CENTER_X = 400
-const CENTER_Y = 300
-
-const INITIAL_NODES: Node[] = [
-  {
-    id: '1',
-    type: 'postCard',
-    position: { x: CENTER_X - 350, y: CENTER_Y - 200 },
-    data: {
-      avatar: '👤',
-      name: 'John Doe',
-      username: 'johndoe',
-      content: 'Just shipped a new feature! 🚀 The team worked incredibly hard on this one. #webdev #coding',
-      image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&h=600&fit=crop',
-    },
-  },
-  {
-    id: '2',
-    type: 'postCard',
-    position: { x: CENTER_X + 200, y: CENTER_Y - 200 },
-    data: {
-      avatar: '👨‍💻',
-      name: 'Jane Smith',
-      username: 'janesmith',
-      content: 'Love working with React Flow! The customization options are amazing. What libraries are you using this week?',
-      image: null,
-    },
-  },
-  {
-    id: '3',
-    type: 'postCard',
-    position: { x: CENTER_X - 350, y: CENTER_Y + 150 },
-    data: {
-      avatar: '🧑‍💼',
-      name: 'Bob Wilson',
-      username: 'bobwilson',
-      content: 'Data visualization is the future! 📊 Creating beautiful graphs and interactive dashboards.',
-      image: null,
-    },
-  },
-  {
-    id: '4',
-    type: 'postCard',
-    position: { x: CENTER_X + 200, y: CENTER_Y + 150 },
-    data: {
-      avatar: '👩‍🎨',
-      name: 'Alice Johnson',
-      username: 'alicej',
-      content: 'Typography matters more than people think. Good design is invisible, bad design is everywhere! ✨',
-      image: null,
-    },
-  },
-]
-
-const INITIAL_EDGES: Edge[] = [
-  {
-    id: 'e1-2',
-    source: '1',
-    target: '2',
-    style: { stroke: '#ffffff', strokeWidth: 4, opacity: 1 },
-  },
-  {
-    id: 'e1-3',
-    source: '1',
-    target: '3',
-    style: { stroke: '#ffffff', strokeWidth: 4, opacity: 1 },
-  },
-  {
-    id: 'e2-4',
-    source: '2',
-    target: '4',
-    style: { stroke: '#ffffff', strokeWidth: 4, opacity: 1 },
-  },
-  {
-    id: 'e3-4',
-    source: '3',
-    target: '4',
-    style: { stroke: '#ffffff', strokeWidth: 4, opacity: 1 },
-  },
-]
-
 function App() {
-  const [nodes, , onNodesChange] = useNodesState(INITIAL_NODES)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(INITIAL_EDGES)
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedPost, setSelectedPost] = useState<PostData | null>(null)
   const [currentPage, setCurrentPage] = useState<'home' | 'signup' | 'login' | 'profile' | 'create-post'>('home')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [edgeOverlay, setEdgeOverlay] = useState({ 
+    isOpen: false, 
+    relationship: '', 
+    similarity: 0,
+    post1Id: '',
+    post2Id: ''
+  })
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -504,10 +623,43 @@ function App() {
   }, [])
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    // Don't allow clicking on query nodes
+    if (node.id === 'query_node' || node.id === 'query-root') {
+      return
+    }
+    
     if (node.type === 'postCard') {
       handleCardClick(node.data as PostData)
     }
   }, [handleCardClick])
+
+  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    // Don't show relationship details for edges connected to query node
+    if (edge.source === 'query_node' || edge.target === 'query_node') {
+      return
+    }
+    
+    const edgeData = edge.data as { relationship: string, similarity: number }
+    if (edgeData) {
+      setEdgeOverlay({
+        isOpen: true,
+        relationship: edgeData.relationship,
+        similarity: edgeData.similarity,
+        post1Id: edge.source,
+        post2Id: edge.target
+      })
+    }
+  }, [])
+
+  const handleCloseEdgeOverlay = useCallback(() => {
+    setEdgeOverlay({ 
+      isOpen: false, 
+      relationship: '', 
+      similarity: 0,
+      post1Id: '',
+      post2Id: ''
+    })
+  }, [])
 
   const handleNavigateToSignup = useCallback(() => {
     setCurrentPage('signup')
@@ -519,7 +671,10 @@ function App() {
 
   const handleBackToHome = useCallback(() => {
     setCurrentPage('home')
-  }, [])
+    setNodes([])
+    setEdges([])
+    setSearchQuery('')
+  }, [setNodes, setEdges])
 
   const handleSignupSuccess = useCallback(() => {
     setCurrentPage('login')
@@ -535,8 +690,7 @@ function App() {
     
     if (token) {
       try {
-        // Call backend logout endpoint
-        await fetch('http://localhost:5000/api/auth/logout', {
+        await fetch('/api/auth/logout', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -545,11 +699,9 @@ function App() {
         })
       } catch (error) {
         console.error('Logout API call failed:', error)
-        // Continue with logout even if API call fails
       }
     }
     
-    // Always clear local storage and update state
     localStorage.removeItem('access_token')
     localStorage.removeItem('user_id')
     setIsLoggedIn(false)
@@ -566,8 +718,144 @@ function App() {
 
   const handlePostCreated = useCallback(() => {
     setCurrentPage('home')
-    // TODO: Refresh posts or add new post to the graph
+    loadGraphData()
   }, [])
+
+  const loadGraphData = useCallback(async (query?: string) => {
+    const token = localStorage.getItem('access_token')
+    
+    try {
+      // Only search if query is provided
+      if (!query || !query.trim()) {
+        // Clear the graph when no search
+        setNodes([])
+        setEdges([])
+        return
+      }
+      
+      // Perform semantic search
+      setIsSearching(true)
+      const response = await fetch('/api/graph/semantic-search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+                     body: JSON.stringify({ 
+             query, 
+             limit: 50, 
+             threshold: 0.25,  // Low threshold to allow typos and handle semantic variations
+             edge_threshold: 0.40  // Lower threshold for more connections
+           })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        
+        // Check if there are no results
+        if (data.posts.length === 0) {
+          setNodes([])
+          setEdges([])
+          return
+        }
+        
+        // Separate query node from posts
+        const queryNode = data.posts.find((post: any) => post.id === 'query_node' || post.is_query)
+        const actualPosts = data.posts.filter((post: any) => post.id !== 'query_node' && !post.is_query)
+        
+        // Create nodes from posts with force-directed layout
+        const numPosts = actualPosts.length
+        const graphNodes: Node[] = actualPosts.map((post: any, index: number) => {
+          const profiles = post.profiles || {}
+          
+          // Force-directed layout with some randomness
+          const angle = (index / numPosts) * 2 * Math.PI
+          const radius = 300 + Math.random() * 200
+          const x = Math.cos(angle) * radius + 400 + Math.random() * 100
+          const y = Math.sin(angle) * radius + 300 + Math.random() * 100
+          
+          return {
+            id: post.id,
+            type: 'postCard',
+            position: { x, y },
+            data: {
+              id: post.id,
+              username: profiles.username || 'User',
+              email: profiles.email,
+              avatar: profiles.profile_pic_url,
+              content: post.content,
+              image_url: post.image_url,
+              title: post.title,
+              created_at: post.created_at,
+              likes_count: post.likes_count || 0,
+              is_liked: post.is_liked || false,
+              author_id: post.author_id
+            }
+          }
+        })
+        
+        // Add query node at the center if it exists
+        if (queryNode) {
+          const queryNodeElement: Node = {
+            id: queryNode.id,
+            type: 'postCard',
+            position: { x: 400, y: 100 },
+            data: {
+              id: queryNode.id,
+              username: 'Query',
+              title: queryNode.title,
+              content: queryNode.content,
+              likes_count: 0,
+              is_liked: false
+            }
+          }
+          graphNodes.unshift(queryNodeElement)
+        }
+        
+        // Create edges with relationship data
+        const graphEdges: Edge[] = data.edges.map((edge: any) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+            style: { 
+            stroke: '#ffffff', 
+            strokeWidth: edge.source === 'query-root' ? 3 : Math.max(2, edge.similarity * 4), 
+            opacity: Math.max(0.5, edge.similarity)
+          },
+          data: {
+            relationship: edge.relationship,
+            similarity: edge.similarity
+          }
+        }))
+        
+        setNodes(graphNodes)
+        setEdges(graphEdges)
+      }
+    } catch (error) {
+      console.error('Error loading graph data:', error)
+    } finally {
+      setIsSearching(false)
+    }
+  }, [setNodes, setEdges])
+
+  const handleSearch = useCallback(() => {
+    if (searchQuery.trim()) {
+      loadGraphData(searchQuery)
+    }
+  }, [searchQuery, loadGraphData])
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('')
+    setNodes([])
+    setEdges([])
+    loadGraphData()
+  }, [loadGraphData, setNodes, setEdges])
+
+  const handleSearchKeyPress = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
+  }, [handleSearch])
 
   // Check authentication status on app load
   useEffect(() => {
@@ -577,8 +865,7 @@ function App() {
       
       if (token && userId) {
         try {
-          // Verify token is still valid by making a request to profile endpoint
-          const response = await fetch('http://localhost:5000/api/auth/profile', {
+          const response = await fetch('/api/auth/profile', {
             method: 'GET',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -589,17 +876,14 @@ function App() {
           if (response.ok) {
             setIsLoggedIn(true)
           } else if (response.status === 401) {
-            // Only clear storage on 401 (Unauthorized)
             localStorage.removeItem('access_token')
             localStorage.removeItem('user_id')
             setIsLoggedIn(false)
           } else {
-            // Other errors (network, server errors), keep user logged in
             setIsLoggedIn(true)
           }
         } catch (error) {
           console.error('Auth check failed:', error)
-          // Network error, keep user logged in to avoid signouts
           setIsLoggedIn(true)
         }
       } else {
@@ -610,6 +894,15 @@ function App() {
 
     checkAuthStatus()
   }, [])
+
+  // Load graph data on mount - don't auto-load, wait for search
+  useEffect(() => {
+    // Don't auto-load all posts, only show results when searching
+    if (currentPage === 'home') {
+      setNodes([])
+      setEdges([])
+    }
+  }, [currentPage])
 
   // Show loading spinner while checking auth status
   if (isLoading) {
@@ -646,55 +939,34 @@ function App() {
           <div className="search-container">
             <input 
               type="text" 
-              placeholder="Search..." 
+              placeholder="Search posts semantically..." 
               className="search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={handleSearchKeyPress}
             />
-            <div className="search-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"/>
-                <path d="m21 21-4.35-4.35"/>
-              </svg>
-            </div>
+            <button 
+              className="search-button" 
+              onClick={handleSearch} 
+              disabled={isSearching}
+              title={isSearching ? 'Searching...' : 'Search'}
+            >
+              {isSearching ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="m21 21-4.35-4.35"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="m21 21-4.35-4.35"/>
+                </svg>
+              )}
+            </button>
           </div>
         </nav>
       </header>
       
-      {/* Nav buttons in top right */}
-      <div className="nav-buttons-top-right">
-        {isLoggedIn && (
-          <button className="nav-icon-btn" title="Create Post" onClick={handleNavigateToCreatePost}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 5v14m-7-7h14"/>
-            </svg>
-          </button>
-        )}
-        {isLoggedIn && (
-          <button className="nav-icon-btn" title="Profile" onClick={handleNavigateToProfile}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="3"/>
-            </svg>
-          </button>
-        )}
-        {!isLoggedIn && (
-          <button className="nav-icon-btn" title="Sign Up" onClick={handleNavigateToSignup}>
-            <svg width="24" height="24" viewBox="0 -960 960 960" fill="currentColor">
-              <path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/>
-            </svg>
-          </button>
-        )}
-        {isLoggedIn && (
-          <button className="nav-icon-btn" title="Logout" onClick={handleLogout}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" x2="9" y1="12" y2="12"/>
-            </svg>
-          </button>
-        )}
-      </div>
-      
-      {/* Floating Logo */}
       <div className="floating-logo" onClick={handleBackToHome}>
         <img src="/curio.png" alt="Curio Logo" className="logo" />
       </div>
@@ -707,10 +979,9 @@ function App() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
+          onEdgeClick={onEdgeClick}
           nodeTypes={NODE_TYPES}
-          fitView
-          fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
-          defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
           style={{ width: '100%', height: '100%' }}
         >
           <Background gap={20} size={2} color="rgba(255, 255, 255, 0.2)" />
@@ -720,7 +991,18 @@ function App() {
       <PostModal 
         isOpen={isModalOpen} 
         onClose={handleCloseModal} 
-        postData={selectedPost} 
+        postData={selectedPost}
+        onBackToHome={handleBackToHome}
+      />
+
+      <EdgeOverlay
+        isOpen={edgeOverlay.isOpen}
+        onClose={handleCloseEdgeOverlay}
+        relationship={edgeOverlay.relationship}
+        similarity={edgeOverlay.similarity}
+        post1Id={edgeOverlay.post1Id}
+        post2Id={edgeOverlay.post2Id}
+        onBackToHome={handleBackToHome}
       />
     </div>
   )
