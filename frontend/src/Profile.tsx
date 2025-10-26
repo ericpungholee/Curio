@@ -102,7 +102,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/profile', {
+      const response = await fetch('/api/auth/profile', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -157,7 +157,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     console.log('Token:', token.substring(0, 20) + '...')
     setIsLoadingPosts(true)
     try {
-      const response = await fetch('http://localhost:5000/api/post/my-posts', {
+      const response = await fetch('/api/post/my-posts', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -169,14 +169,26 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
       console.log('Response headers:', response.headers)
       
       if (!response.ok) {
+        if (response.status === 404) {
+          // No posts found - this is normal for new users
+          console.log('No posts found - setting empty array')
+          setUserPosts([])
+          return
+        }
+        
         const errorText = await response.text()
         console.error('Failed to fetch posts:', errorText)
         console.error('Response status:', response.status)
-        setNotification({
-          message: `Failed to fetch posts: ${response.status}`,
-          type: 'error',
-          isVisible: true
-        })
+        
+        // Only show error notification for actual errors (not 404)
+        if (response.status !== 404) {
+          setNotification({
+            message: `Failed to fetch posts: ${response.status}`,
+            type: 'error',
+            isVisible: true
+          })
+        }
+        
         throw new Error('Failed to fetch posts')
       }
 
@@ -190,11 +202,17 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
       }
     } catch (error) {
       console.error('Error fetching user posts:', error)
-      setNotification({
-        message: 'Failed to fetch posts. Please check your connection.',
-        type: 'error',
-        isVisible: true
-      })
+      // Only show notification if it's a network error (not 404 or empty array)
+      if (!(error instanceof Error && error.message.includes('Failed to fetch posts'))) {
+        setNotification({
+          message: 'Failed to fetch posts. Please check your connection.',
+          type: 'error',
+          isVisible: true
+        })
+      } else {
+        // Just set empty array for any other errors
+        setUserPosts([])
+      }
     } finally {
       setIsLoadingPosts(false)
     }
@@ -217,7 +235,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
 
     setIsLoadingComments(true)
     try {
-      const response = await fetch(`http://localhost:5000/api/post/post/${postId}`, {
+      const response = await fetch(`/api/post/post/${postId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -250,7 +268,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     console.log('Submitting comment:', { postId: selectedPost.id, content: newComment.trim() })
     setIsSubmittingComment(true)
     try {
-      const response = await fetch(`http://localhost:5000/api/post/comment/${selectedPost.id}`, {
+      const response = await fetch(`/api/post/comment/${selectedPost.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -302,7 +320,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/post/comment/${commentId}`, {
+      const response = await fetch(`/api/post/comment/${commentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -343,7 +361,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/post/like-comment/${commentId}`, {
+      const response = await fetch(`/api/post/like-comment/${commentId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -390,7 +408,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/post/like-post/${selectedPost.id}`, {
+      const response = await fetch(`/api/post/like-post/${selectedPost.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -437,7 +455,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`http://localhost:5000/api/post/delete-post/${selectedPost.id}`, {
+      const response = await fetch(`/api/post/delete-post/${selectedPost.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -476,7 +494,7 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
     
     if (token) {
       try {
-        await fetch('http://localhost:5000/api/auth/logout', {
+        await fetch('/api/auth/logout', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -836,6 +854,10 @@ const Profile = ({ onBackToHome, onLogout }: ProfileProps) => {
       {/* Post Detail Modal */}
       {selectedPost && (
         <div className="post-detail-modal-overlay" onClick={handleCloseModal}>
+          {/* Floating Logo - close modal when clicked */}
+          <div className="floating-logo" onClick={handleCloseModal}>
+            <img src="/curio.png" alt="Curio Logo" className="logo" />
+          </div>
           <div className="post-detail-modal" onClick={(e) => e.stopPropagation()}>
             <div className="post-detail-header">
               <h2 className="post-detail-title">{selectedPost.title}</h2>

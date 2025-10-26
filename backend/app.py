@@ -24,9 +24,11 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 from components.auth import auth_bp
 from components.posts import posts_bp
 from components.storage import storage_bp
+from components.graph_search import graph_search_bp
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(posts_bp, url_prefix="/api/post")
 app.register_blueprint(storage_bp, url_prefix="/api/storage")
+app.register_blueprint(graph_search_bp, url_prefix="/api/graph")
 
 @app.route("/health")
 def health():

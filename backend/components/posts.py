@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
-from .common import supabase, get_user_id_from_token, create_user_supabase_client
 import os
+from .common import supabase, get_user_id_from_token, create_user_supabase_client
+from .embedding_utils import get_openai_embedding
 
 posts_bp = Blueprint("posts", __name__)
 
@@ -25,23 +26,29 @@ def create_post():
         if not title or not content:
             return jsonify({"error": "Title and content are required"}), 400
         
+        # Generate embedding for semantic search
+        embedding = None
+        if content:
+            text_to_embed = f"{title} {content}" if title else content
+            embedding = get_openai_embedding(text_to_embed, dimension="small")
+            if embedding:
+                print(f"✓ Embedding generated (dimensions: {len(embedding)})")
+        
         post_data = {
             "author_id": user_id,
             "title": title,
             "content": content
         }
         
+        # Add embedding if generated
+        if embedding:
+            post_data["embedding"] = embedding
+        
         # Add image URL if provided
         if image_url:
             post_data["image_url"] = image_url
         
-        # Revert to service role approach - this will work
-        # The service role bypasses RLS and we're manually setting author_id
-        print(f"Creating post for user_id: {user_id}")
-        print(f"Post data: {post_data}")
-        
         result = supabase.table("posts").insert(post_data).execute()
-        print(f"Post insertion result: {result}")
         
         if result.data:
             return jsonify({"post": result.data[0]}), 201
@@ -53,26 +60,53 @@ def create_post():
 
 @posts_bp.route("/get-posts", methods=["GET"])
 def get_posts():
-    """Get all posts with comments and author info"""
+    """Get all posts with comments and author info - Public endpoint (no auth required)"""
     try:
-        result = supabase.table("posts").select(
-            "*, author_id, profiles!inner(username, email)"
-        ).order("created_at", desc=True).execute()
+        print("🔓 Public endpoint: get_posts called (no authentication required)")
+        # Fetch posts first (accessible to non-logged-in users)
+        posts_result = supabase.table("posts").select("*").order("created_at", desc=True).execute()
+        posts = posts_result.data if posts_result.data else []
         
-        posts = result.data if result.data else []
+        # Manually fetch profile information for each post author
+        for post in posts:
+            try:
+                profile_result = supabase.table("profiles").select("username, email").eq("id", post["author_id"]).single().execute()
+                if profile_result.data:
+                    post["profiles"] = {
+                        "username": profile_result.data.get("username", ""),
+                        "email": profile_result.data.get("email", "")
+                    }
+                else:
+                    post["profiles"] = {"username": "Anonymous", "email": ""}
+            except Exception as profile_err:
+                print(f"Could not fetch profile for post author {post.get('author_id')}: {profile_err}")
+                post["profiles"] = {"username": "Anonymous", "email": ""}
         
         # Get current user ID for like status
         user_id = get_user_id_from_token(request)
         
         # Get comments and like information for each post
         for post in posts:
-            # Get comments
+            # Get comments with profile information (accessible to non-logged-in users)
             try:
-                comments_result = supabase.table("comments").select(
-                    "*, profiles!author_id(username)"
-                ).eq("post_id", post["id"]).order("created_at", desc=False).execute()
-                
+                # Fetch comments first
+                comments_result = supabase.table("comments").select("*").eq("post_id", post["id"]).order("created_at", desc=False).execute()
                 comments = comments_result.data if comments_result.data else []
+                
+                # Manually fetch profiles for each comment to ensure they're visible
+                print(f"📝 Fetching profiles for {len(comments)} comments")
+                for comment in comments:
+                    try:
+                        profile_result = supabase.table("profiles").select("username").eq("id", comment["author_id"]).single().execute()
+                        if profile_result.data:
+                            comment["profiles"] = {"username": profile_result.data.get("username", "")}
+                            print(f"✓ Found profile for comment author {comment['author_id']}")
+                        else:
+                            print(f"⚠ No profile data for comment author {comment['author_id']}")
+                            comment["profiles"] = {"username": "Anonymous"}
+                    except Exception as profile_err:
+                        print(f"❌ Error fetching profile for comment author {comment.get('author_id')}: {str(profile_err)}")
+                        comment["profiles"] = {"username": "Anonymous"}
                 
                 # Add like information to each comment
                 for comment in comments:
@@ -91,7 +125,7 @@ def get_posts():
                 
                 post["comments"] = comments
             except Exception as e:
-                print(f"Error fetching comments for post {post['id']}: {e}")
+                print(f"❌ Error fetching comments for post {post['id']}: {e}")
                 post["comments"] = []
             
             # Get like count (with error handling)
@@ -113,6 +147,7 @@ def get_posts():
                 print(f"Error checking user like for post {post['id']}: {e}")
                 post["is_liked"] = False
         
+        print(f"✅ Returning {len(posts)} posts with comments")
         return jsonify({"posts": posts}), 200
     except Exception as e:
         print(f"Error getting posts: {e}")
@@ -121,26 +156,16 @@ def get_posts():
 @posts_bp.route("/my-posts", methods=["GET"])
 def get_my_posts():
     """Get the current user's posts ordered by date (newest first)"""
-    print("=== MY-POSTS ENDPOINT CALLED ===")
-    print("Request headers:", dict(request.headers))
-    
     user_id = get_user_id_from_token(request)
-    print(f"Extracted user_id: {user_id}")
     
     if not user_id:
-        print("Unauthorized: No user_id found")
         return jsonify({"error": "Unauthorized"}), 401
     
     try:
-        print(f"Fetching posts for user_id: {user_id}")
-        
         # Query posts table with like information
         result = supabase.table("posts").select(
             "id, title, content, image_url, created_at, author_id"
         ).eq("author_id", user_id).order("created_at", desc=True).execute()
-        
-        print(f"Query result: {result}")
-        print(f"Posts found: {len(result.data) if result.data else 0}")
         
         posts = result.data if result.data else []
         
@@ -162,12 +187,9 @@ def get_my_posts():
                 print(f"Error checking user like for post {post['id']}: {e}")
                 post["is_liked"] = False
         
-        print(f"Final posts with like info: {posts}")
         return jsonify({"posts": posts}), 200
     except Exception as e:
         print(f"Error getting user posts: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Failed to get user posts: {str(e)}"}), 500
 
 @posts_bp.route("/delete-post/<post_id>", methods=["DELETE"])
@@ -196,23 +218,13 @@ def delete_post(post_id):
 @posts_bp.route("/like-post/<post_id>", methods=["POST"])
 def like_post(post_id):
     """Like or unlike a post (users can like their own posts)"""
-    print("=== LIKE POST ENDPOINT CALLED ===")
-    print(f"Request headers: {dict(request.headers)}")
-    
     user_id = get_user_id_from_token(request)
     if not user_id:
-        print("ERROR: Could not get user_id from token")
-        print(f"Authorization header: {request.headers.get('Authorization')}")
         return jsonify({"error": "Unauthorized"}), 401
-    
-    print(f"Attempting to like post {post_id} for user {user_id}")
-    print(f"Supabase client type: {type(supabase)}")
     
     try:
         # Check if user already liked the post
-        print("Checking for existing like...")
         existing_like = supabase.table("post_likes").select("*").eq("post_id", post_id).eq("user_id", user_id).execute()
-        print(f"Existing like result: {existing_like.data}")
         
         if existing_like.data:
             # Unlike the post
@@ -228,9 +240,6 @@ def like_post(post_id):
             return jsonify({"message": "Post liked", "liked": True}), 200
     except Exception as e:
         print(f"Error liking post: {e}")
-        print(f"Post ID: {post_id}, User ID: {user_id}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Failed to like post: {str(e)}"}), 500
 
 # COMMENT ENDPOINTS
@@ -257,16 +266,22 @@ def create_comment(post_id):
         }).execute()
         
         if result.data:
-            # Fetch the comment with profile information using the correct relationship
+            # Fetch the comment with profile information
             comment_id = result.data[0]["id"]
-            comment_with_profile = supabase.table("comments").select(
-                "*, profiles!author_id(username)"
-            ).eq("id", comment_id).single().execute()
+            comment = result.data[0]
             
-            if comment_with_profile.data:
-                return jsonify({"comment": comment_with_profile.data}), 201
-            else:
-                return jsonify({"comment": result.data[0]}), 201
+            # Manually fetch profile to ensure it's accessible
+            try:
+                profile_result = supabase.table("profiles").select("username").eq("id", comment["author_id"]).single().execute()
+                if profile_result.data:
+                    comment["profiles"] = {"username": profile_result.data.get("username", "")}
+                else:
+                    comment["profiles"] = {"username": "Anonymous"}
+            except Exception as profile_err:
+                print(f"Could not fetch profile for comment author {comment.get('author_id')}: {profile_err}")
+                comment["profiles"] = {"username": "Anonymous"}
+            
+            return jsonify({"comment": comment}), 201
         else:
             return jsonify({"error": "Failed to create comment"}), 500
     except Exception as e:
@@ -326,14 +341,27 @@ def like_comment(comment_id):
 def get_post(post_id):
     """Get a single post with comments"""
     try:
-        result = supabase.table("posts").select(
-            "*, author_id, profiles!inner(username, email)"
-        ).eq("id", post_id).single().execute()
+        # Fetch post first (accessible to non-logged-in users)
+        result = supabase.table("posts").select("*").eq("id", post_id).single().execute()
         
         if not result.data:
             return jsonify({"error": "Post not found"}), 404
         
         post = result.data
+        
+        # Manually fetch profile information for the post author
+        try:
+            profile_result = supabase.table("profiles").select("username, email").eq("id", post["author_id"]).single().execute()
+            if profile_result.data:
+                post["profiles"] = {
+                    "username": profile_result.data.get("username", ""),
+                    "email": profile_result.data.get("email", "")
+                }
+            else:
+                post["profiles"] = {"username": "Anonymous", "email": ""}
+        except Exception as profile_err:
+            print(f"Could not fetch profile for post author {post.get('author_id')}: {profile_err}")
+            post["profiles"] = {"username": "Anonymous", "email": ""}
         
         # Get like information (with error handling)
         try:
@@ -355,12 +383,24 @@ def get_post(post_id):
             print(f"Error checking user like for post {post_id}: {e}")
             post["is_liked"] = False
         
-        # Get comments for this post
-        comments_result = supabase.table("comments").select(
-            "*, profiles!author_id(username)"
-        ).eq("post_id", post_id).order("created_at", desc=False).execute()
-        
-        comments = comments_result.data if comments_result.data else []
+        # Get comments for this post (accessible to non-logged-in users)
+        try:
+            # Fetch comments first
+            comments_result = supabase.table("comments").select("*").eq("post_id", post_id).order("created_at", desc=False).execute()
+            comments = comments_result.data if comments_result.data else []
+            
+            # Manually fetch profiles for each comment to ensure they're visible
+            for comment in comments:
+                try:
+                    profile_result = supabase.table("profiles").select("username").eq("id", comment["author_id"]).single().execute()
+                    if profile_result.data:
+                        comment["profiles"] = {"username": profile_result.data.get("username", "")}
+                except Exception as profile_err:
+                    print(f"Could not fetch profile for comment author {comment.get('author_id')}: {profile_err}")
+                    comment["profiles"] = {"username": "Anonymous"}
+        except Exception as comments_err:
+            print(f"Error fetching comments for post {post_id}: {comments_err}")
+            comments = []
         
         # Add like information to each comment
         for comment in comments:
@@ -455,3 +495,4 @@ def upload_post_image():
     except Exception as e:
         print(f"Post image upload endpoint error: {e}")
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+

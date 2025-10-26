@@ -177,13 +177,16 @@ def get_profile():
             token = auth_header.split(" ")[1]
             return supabase.auth.get_user(token)
         
-        response = retry_supabase_auth_call(auth_call)
+        response = retry_supabase_auth_call(auth_call, suppress_expired_token_log=True)
         if response and response.user:
             user_metadata = response.user.user_metadata or {}
         else:
             return jsonify({"error": "Unauthorized"}), 401
     except Exception as e:
-        print(f"JWT verification error: {e}")
+        # Only log if it's not an expired token error
+        error_str = str(e).lower()
+        if "token is expired" not in error_str and "token has invalid claims" not in error_str:
+            print(f"JWT verification error: {e}")
         return jsonify({"error": "Unauthorized"}), 401
 
     # Get profile data from profiles table
@@ -236,7 +239,7 @@ def check_username():
 
 @auth_bp.route("/profile/upload-pic", methods=["POST"])
 def upload_profile_pic():
-    user_id = get_user_id_from_token()
+    user_id = get_user_id_from_token(request)
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
@@ -311,6 +314,43 @@ def get_profile_pic(user_id):
         print(f"Get profile pic error: {e}")
         return jsonify({"error": f"Failed to get profile picture: {str(e)}"}), 500
 
+@auth_bp.route("/refresh", methods=["POST"])
+def refresh_token():
+    """
+    Refresh the access token using the refresh token
+    """
+    try:
+        body = request.get_json()
+        if not body:
+            return jsonify({"error": "Request body is required"}), 400
+        
+        refresh_token = body.get("refresh_token")
+        if not refresh_token:
+            return jsonify({"error": "Refresh token is required"}), 400
+
+        def refresh_call():
+            return supabase.auth.refresh_session(refresh_token)
+        
+        resp = retry_supabase_auth_call(refresh_call)
+        
+        # Check if response has errors
+        if hasattr(resp, 'error') and resp.error:
+            print(f"Token refresh error: {resp.error}")
+            return jsonify({"error": "Invalid refresh token"}), 401
+
+        session = getattr(resp, "session", None)
+        if not session:
+            return jsonify({"error": "Failed to refresh token"}), 401
+
+        return jsonify({
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "user_id": resp.user.id
+        })
+    except Exception as e:
+        print(f"Token refresh error: {e}")
+        return jsonify({"error": f"Token refresh failed: {str(e)}"}), 500
+
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     try:
@@ -319,10 +359,11 @@ def logout():
             token = auth_header.split(" ")[1]
             try:
                 # Sign out the user from Supabase
-                supabase.auth.sign_out(token)
+                # Use sign_out() without parameters to sign out the current session
+                supabase.auth.sign_out()
             except Exception as e:
-                print(f"Supabase logout error: {e}")
-                # Continue with logout even if Supabase call fails
+                # Silently continue with logout even if Supabase call fails
+                pass
         
         return jsonify({"message": "Logged out successfully"}), 200
     except Exception as e:

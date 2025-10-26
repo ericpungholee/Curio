@@ -32,7 +32,7 @@ else:
 # Create Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def retry_supabase_auth_call(func, max_retries=3, base_delay=1):
+def retry_supabase_auth_call(func, max_retries=3, base_delay=1, suppress_expired_token_log=False):
     """
     Retry mechanism for Supabase auth calls with exponential backoff
     """
@@ -41,10 +41,15 @@ def retry_supabase_auth_call(func, max_retries=3, base_delay=1):
             start_time = time.time()
             result = func()
             end_time = time.time()
-            print(f"Auth call succeeded in {end_time - start_time:.2f}s (attempt {attempt + 1})")
+            if not suppress_expired_token_log:
+                print(f"Auth call succeeded in {end_time - start_time:.2f}s (attempt {attempt + 1})")
             return result
         except Exception as e:
             error_str = str(e).lower()
+            
+            # Check if it's an expired token error
+            is_expired_token = "token is expired" in error_str or "token has invalid claims" in error_str
+            
             if "timeout" in error_str or "timed out" in error_str or "read operation timed out" in error_str:
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)  # Exponential backoff
@@ -65,7 +70,9 @@ def retry_supabase_auth_call(func, max_retries=3, base_delay=1):
                     raise e
             else:
                 # Non-retryable error, don't retry
-                print(f"Auth call failed with non-retryable error: {e}")
+                # Suppress expired token logs if flag is set
+                if not (suppress_expired_token_log and is_expired_token):
+                    print(f"Auth call failed with non-retryable error: {e}")
                 raise e
     return None
 
@@ -73,31 +80,26 @@ def get_user_id_from_token(request):
     """
     Extract user ID from JWT token in request headers
     """
-    print("=== GET_USER_ID_FROM_TOKEN CALLED ===")
     auth_header = request.headers.get("Authorization")
-    print(f"Authorization header: {auth_header}")
     
     if not auth_header or not auth_header.startswith("Bearer "):
-        print("No valid Authorization header found")
         return None
     
     token = auth_header.split(" ")[1]
-    print(f"Token (first 20 chars): {token[:20]}...")
     
     try:
         def auth_call():
             return supabase.auth.get_user(token)
         
-        response = retry_supabase_auth_call(auth_call)
-        print(f"Auth response: {response}")
+        response = retry_supabase_auth_call(auth_call, suppress_expired_token_log=True)
         
         if response and response.user:
-            print(f"User ID extracted: {response.user.id}")
             return response.user.id
-        else:
-            print("No user found in response")
     except Exception as e:
-        print(f"JWT verification error: {e}")
+        # Only log if it's not an expired token error
+        error_str = str(e).lower()
+        if "token is expired" not in error_str and "token has invalid claims" not in error_str:
+            print(f"JWT verification error: {e}")
         return None
     return None
 

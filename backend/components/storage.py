@@ -165,13 +165,16 @@ def upload_profile_pic():
         def auth_call():
             return supabase.auth.get_user(token)
         
-        response = retry_supabase_auth_call(auth_call)
+        response = retry_supabase_auth_call(auth_call, suppress_expired_token_log=True)
         if response and response.user:
             user_id = response.user.id
         else:
             return jsonify({"error": "Unauthorized"}), 401
     except Exception as e:
-        print(f"JWT verification error: {e}")
+        # Only log if it's not an expired token error
+        error_str = str(e).lower()
+        if "token is expired" not in error_str and "token has invalid claims" not in error_str:
+            print(f"JWT verification error: {e}")
         return jsonify({"error": "Unauthorized"}), 401
     
     try:
