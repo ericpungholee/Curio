@@ -1,6 +1,6 @@
 # 🧩 Curio — The Graph Feed for Ideas
 
-##LINK 
+#LINK 
 https://curio-lake-two.vercel.app/
 
 Curio reimagines the social feed as a semantic graph, where posts connect through shared meaning instead of hashtags or opaque engagement algorithms.
